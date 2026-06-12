@@ -1,0 +1,5 @@
+PubSubClient
+ArduinoJson
+DHT sensor library
+LiquidCrystal I2C
+Adafruit Unified Sensor

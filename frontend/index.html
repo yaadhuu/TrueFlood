@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FloodSense – Multi-Node Dashboard</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+        }
+      }
+    }
+  </script>
+
+  <!-- MQTT.js over WebSocket -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.0.5/mqtt.min.js"></script>
+  <!-- Chart.js for sparklines -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+  <style>
+    /* Premium Glassmorphism & Custom scrollbar */
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(51, 65, 85, 0.5);
+      border-radius: 2px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(100, 116, 139, 0.8);
+    }
+    @keyframes flash-update {
+      0% { background-color: rgba(56, 189, 248, 0.15); }
+      100% { background-color: transparent; }
+    }
+    .flash-update {
+      animation: flash-update 0.8s ease-out;
+    }
+    .prob-bar {
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+  </style>
+</head>
+<body class="h-full text-slate-200 flex flex-col font-sans antialiased selection:bg-blue-500/30 selection:text-blue-200">
+
+  <!-- ── Alert Banner ── -->
+  <div id="alertBanner" class="hidden bg-red-500/10 border-b border-red-500/50 py-2.5 px-6 text-center text-sm font-semibold text-red-400 backdrop-blur-md z-50 transition-all duration-300">
+    <span class="inline-flex items-center gap-2 drop-shadow-[0_0_8px_rgba(248,113,113,0.5)]">
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+      CRITICAL FLOOD WARNING ACTIVE: <span id="alertNodes" class="text-white tracking-wide"></span>
+    </span>
+  </div>
+
+  <!-- ── Header ── -->
+  <header class="glass-panel sticky top-0 z-40 h-16 flex items-center justify-between px-6 border-b-0">
+    <div class="flex items-center gap-3">
+      <div class="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.15)]">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/>
+          <path d="M3 12s1.5-3 4.5-3 4.5 6 9 6 4.5-3 4.5-3"/>
+          <path d="M12 7v2m0 6v2"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-base font-semibold tracking-tight text-slate-100 flex items-center gap-2">
+          FloodSense 
+          <span class="text-[10px] font-medium text-slate-400 bg-slate-800/50 px-2 py-0.5 rounded-full border border-slate-700/50">Multi-Node</span>
+        </h1>
+        <p class="text-[10px] text-slate-500">AI-Powered Hydro-Telemetry Platform</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-4">
+      <div class="hidden md:flex items-center gap-2 bg-slate-900/50 border border-slate-800 rounded-lg px-3 py-1.5 text-xs">
+        <span class="text-slate-500 font-mono">API:</span>
+        <input id="apiUrlInput" type="text" value="http://localhost:8080" placeholder="API URL" class="bg-transparent border-none focus:outline-none text-slate-300 w-36 font-mono text-[10px]" title="Configure REST endpoint">
+        <button id="syncBtn" class="text-slate-500 hover:text-slate-300 transition-colors" title="Sync data">
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H17" />
+          </svg>
+        </button>
+      </div>
+      <div id="mqttStatus" class="flex items-center gap-2 bg-slate-900/50 border border-slate-800 px-3 py-1.5 rounded-full text-[11px] text-slate-400 transition-colors duration-300">
+        <span id="mqttDot" class="h-1.5 w-1.5 rounded-full bg-slate-600 transition-colors duration-300"></span>
+        <span id="mqttLabel" class="font-medium tracking-wide">Connecting...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main Layout ── -->
+  <main class="flex-1 overflow-y-auto p-6 max-w-7xl w-full mx-auto space-y-8">
+
+    <!-- ── System Overview ── -->
+    <section>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        <div class="glass-panel p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden group">
+          <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
+            <svg class="h-28 w-28 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+          </div>
+          <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Active Nodes</span>
+          <span id="sumNodes" class="text-3xl font-light text-slate-100 font-mono mt-3 drop-shadow-sm">0</span>
+        </div>
+
+        <div class="glass-panel p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden group border-b-2 border-b-red-500/30">
+          <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
+            <svg class="h-28 w-28 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+          </div>
+          <span class="text-[10px] font-semibold uppercase tracking-wider text-red-400/80">Critical Alerts</span>
+          <span id="sumAlert" class="text-3xl font-light text-red-400 font-mono mt-3 drop-shadow-[0_0_8px_rgba(248,113,113,0.3)]">0</span>
+        </div>
+
+        <div class="glass-panel p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden group border-b-2 border-b-amber-500/30">
+          <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
+            <svg class="h-28 w-28 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+          </div>
+          <span class="text-[10px] font-semibold uppercase tracking-wider text-amber-400/80">Sensors Watch</span>
+          <span id="sumWatch" class="text-3xl font-light text-amber-400 font-mono mt-3 drop-shadow-[0_0_8px_rgba(251,191,36,0.3)]">0</span>
+        </div>
+
+        <div class="glass-panel p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden group">
+          <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
+            <svg class="h-28 w-28 text-slate-100" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+          </div>
+          <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Total Packets</span>
+          <span id="sumMessages" class="text-3xl font-light text-slate-300 font-mono mt-3">0</span>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Live Sensor Grid ── -->
+    <section>
+      <div id="nodeGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Empty State -->
+        <div id="emptyState" class="col-span-full glass-panel py-20 px-6 text-center rounded-2xl flex flex-col items-center justify-center">
+          <div class="p-4 bg-slate-900/50 rounded-full border border-slate-800/50 text-slate-600 animate-pulse mb-4">
+            <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="currentColor"/>
+            </svg>
+          </div>
+          <h3 class="text-sm font-medium text-slate-300">Awaiting Hydrological Feeds</h3>
+          <p class="text-xs text-slate-500 max-w-xs mx-auto mt-2">Ensure the Python MQTT bridge is running and Wokwi nodes are emitting telemetry.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Event Log ── -->
+    <section>
+      <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="bg-slate-900/40 px-5 py-3 border-b border-slate-800/50 flex items-center justify-between text-xs text-slate-400">
+          <span class="font-medium tracking-wide">Live Events Console</span>
+          <button id="clearLogBtn" class="text-slate-500 hover:text-slate-300 transition-colors">Clear</button>
+        </div>
+        <div id="eventLog" class="h-40 overflow-y-auto px-5 py-3 font-mono text-[11px] leading-relaxed space-y-1 custom-scrollbar">
+          <div class="text-slate-500">[System] Initializing listener. Waiting for events...</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Footer ── -->
+  <footer class="h-12 border-t border-slate-900/50 flex items-center justify-between px-6 text-[10px] text-slate-600 bg-slate-950/80 backdrop-blur-md">
+    <span>© 2026 FloodSense</span>
+    <span class="font-mono">HiveMQ + Random Forest Classifier</span>
+  </footer>
+
+  <script>
+    // ═══════════════════════════════════════════════════════
+    //  Configuration & Initialization
+    // ═══════════════════════════════════════════════════════
+    const BROKER_WSS = "wss://broker.hivemq.com:8884/mqtt";
+    const TOPIC_SENSOR_ALL = "flood/sensor/+";
+    const TOPIC_ALERT_ALL  = "flood/alert/+";
+    const CLIENT_ID        = "dashboard-" + Math.random().toString(16).slice(2, 8);
+
+    const nodeData = {};
+    let msgCount = 0;
+    const charts = {};
+
+    const el = id => document.getElementById(id);
+
+    let backendApiUrl = localStorage.getItem("flood_backend_url") || "http://localhost:8080";
+    el("apiUrlInput").value = backendApiUrl;
+
+    el("apiUrlInput").addEventListener("change", (e) => {
+      backendApiUrl = e.target.value.trim().replace(/\/$/, "");
+      localStorage.setItem("flood_backend_url", backendApiUrl);
+      logEvent("system", "INFO", `REST API endpoint updated: ${backendApiUrl}`);
+    });
+
+    el("syncBtn").addEventListener("click", syncFromBackend);
+    el("clearLogBtn").addEventListener("click", () => {
+      el("eventLog").innerHTML = `<div class="text-slate-500">[System] Console cleared.</div>`;
+    });
+
+    function fmt(val, dec = 1) {
+      return (val == null) ? "—" : Number(val).toFixed(dec);
+    }
+
+    function timeNow() {
+      return new Date().toLocaleTimeString("en-GB", { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    // ─── Logger ───
+    function logEvent(nodeId, level, msg) {
+      const log = el("eventLog");
+      const div = document.createElement("div");
+      
+      let colorClass = "text-slate-500";
+      if (level === "ALERT") colorClass = "text-red-400";
+      else if (level === "WATCH") colorClass = "text-amber-400";
+      else if (level === "NORMAL") colorClass = "text-emerald-400";
+      else if (level === "INFO") colorClass = "text-blue-400";
+
+      div.className = "flex items-start gap-4 hover:bg-slate-800/20 px-2 py-0.5 rounded transition-colors";
+      div.innerHTML = `
+        <span class="text-slate-600 shrink-0 select-none">${timeNow()}</span>
+        <span class="text-slate-400 shrink-0 w-16 truncate" title="${nodeId}">${nodeId}</span>
+        <span class="${colorClass} flex-1 break-all">${msg}</span>
+      `;
+      log.prepend(div);
+      while (log.children.length > 100) log.removeChild(log.lastChild);
+    }
+
+    // ─── Banner Updates ───
+    function updateAlertBanner() {
+      const alertNodes = Object.values(nodeData).filter(n => n.alert === "ALERT").map(n => n.node_label);
+      const banner = el("alertBanner");
+      if (alertNodes.length > 0) {
+        banner.classList.remove("hidden");
+        el("alertNodes").textContent = alertNodes.join(", ");
+      } else {
+        banner.classList.add("hidden");
+      }
+    }
+
+    // ─── Metrics Panel Updates ───
+    function updateSummary() {
+      const nodes = Object.values(nodeData);
+      el("sumNodes").textContent = nodes.length;
+      el("sumAlert").textContent = nodes.filter(n => n.alert === "ALERT").length;
+      el("sumWatch").textContent = nodes.filter(n => n.alert === "WATCH").length;
+      el("sumMessages").textContent = msgCount;
+    }
+
+    // ─── Chart.js Helper ───
+    function getOrCreateChart(nodeId, canvasEl) {
+      if (charts[nodeId]) return charts[nodeId];
+      const ctx = canvasEl.getContext("2d");
+      const chart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [{
+            data: [],
+            borderColor: "rgba(56, 189, 248, 0.8)",
+            backgroundColor: "rgba(56, 189, 248, 0.05)",
+            borderWidth: 1.5,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            tension: 0.4,
+            fill: true,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          scales: {
+            x: { display: false },
+            y: { display: false, min: 0 }
+          },
+          animation: { duration: 0 }
+        }
+      });
+      charts[nodeId] = chart;
+      return chart;
+    }
+
+    function pushChartPoint(nodeId, wl) {
+      const chart = charts[nodeId];
+      if (!chart) return;
+      chart.data.labels.push("");
+      chart.data.datasets[0].data.push(wl);
+      if (chart.data.labels.length > 20) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+      }
+      chart.update();
+    }
+
+    // ─── Dynamic Card Renderer ───
+    function renderNodeCard(nodeId) {
+      const nd = nodeData[nodeId];
+      const alert = nd.alert || "OFFLINE";
+      const probs = nd.probs || { NORMAL: 0, WATCH: 0, ALERT: 0 };
+
+      let card = el("card-" + nodeId);
+      const isNew = !card;
+
+      if (isNew) {
+        card = document.createElement("div");
+        card.id = "card-" + nodeId;
+        card.className = "glass-panel rounded-2xl overflow-hidden transition-all duration-500 hover:-translate-y-1";
+        
+        card.innerHTML = `
+          <div class="px-5 py-4 border-b border-slate-800/40 bg-slate-900/20 flex items-center justify-between">
+            <div>
+              <div class="text-sm font-semibold tracking-tight text-slate-100 flex items-center gap-2">
+                <span class="relative flex h-1.5 w-1.5">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75" id="cn-ping-${nodeId}"></span>
+                  <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-slate-500" id="cn-dot-${nodeId}"></span>
+                </span>
+                ${nd.node_label}
+              </div>
+              <div class="text-[9px] text-slate-500 font-mono mt-1 uppercase tracking-wider">${nodeId}</div>
+            </div>
+            <div class="text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded" id="cn-badge-${nodeId}">OFFLINE</div>
+          </div>
+          
+          <div class="p-5 space-y-5">
+            <div class="grid grid-cols-2 gap-2" id="cn-sensors-${nodeId}"></div>
+            
+            <div class="space-y-2">
+              <div class="flex justify-between items-center text-[9px] font-semibold text-slate-500 uppercase tracking-widest">
+                <span>ML Probability</span>
+                <span id="cn-proba-${nodeId}" class="font-mono text-slate-400"></span>
+              </div>
+              <div class="h-1.5 bg-slate-900/80 rounded-full flex overflow-hidden border border-slate-800/50 shadow-inner">
+                <div class="bg-emerald-500 prob-bar shadow-[0_0_8px_rgba(16,185,129,0.4)]" id="cn-bn-${nodeId}" style="width: 0%"></div>
+                <div class="bg-amber-500 prob-bar shadow-[0_0_8px_rgba(245,158,11,0.4)]" id="cn-bw-${nodeId}" style="width: 0%"></div>
+                <div class="bg-red-500 prob-bar shadow-[0_0_8px_rgba(239,68,68,0.6)]" id="cn-ba-${nodeId}" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <div class="h-12 w-full relative opacity-70 mix-blend-screen">
+              <canvas id="cn-chart-${nodeId}"></canvas>
+            </div>
+          </div>
+        `;
+        
+        const empty = el("emptyState");
+        if (empty) empty.remove();
+        el("nodeGrid").appendChild(card);
+        getOrCreateChart(nodeId, el("cn-chart-" + nodeId));
+      }
+
+      // Dynamic Styling based on alert state
+      const isAlert = alert === "ALERT", isWatch = alert === "WATCH";
+      
+      card.style.borderColor = isAlert ? "rgba(239,68,68,0.3)" : isWatch ? "rgba(245,158,11,0.3)" : "rgba(16,185,129,0.2)";
+      card.style.boxShadow = isAlert ? "0 8px 32px 0 rgba(239,68,68,0.15)" : isWatch ? "0 8px 32px 0 rgba(245,158,11,0.1)" : "0 8px 32px 0 rgba(0,0,0,0.3)";
+
+      const badge = el("cn-badge-" + nodeId);
+      badge.textContent = alert;
+      badge.className = `text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded ${
+        isAlert ? "bg-red-500/10 text-red-400" : isWatch ? "bg-amber-500/10 text-amber-400" : "bg-emerald-500/10 text-emerald-400"
+      }`;
+
+      el("cn-dot-" + nodeId).className = `relative inline-flex rounded-full h-1.5 w-1.5 ${isAlert ? "bg-red-500" : isWatch ? "bg-amber-500" : "bg-emerald-500"}`;
+      el("cn-ping-" + nodeId).className = `animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isAlert ? "bg-red-400" : isWatch ? "bg-amber-400" : "bg-emerald-400"}`;
+
+      // Update Sensors
+      const sGrid = el("cn-sensors-" + nodeId);
+      sGrid.innerHTML = `
+        <div class="bg-slate-900/30 p-2.5 rounded-lg border border-slate-800/40">
+          <div class="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Water Lvl</div>
+          <div class="text-sm font-medium ${nd.water_level_m >= 40 ? 'text-red-400' : 'text-slate-200'}">${fmt(nd.water_level_m, 2)}<span class="text-[10px] text-slate-500 ml-1">m</span></div>
+        </div>
+        <div class="bg-slate-900/30 p-2.5 rounded-lg border border-slate-800/40">
+          <div class="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Rain 24h</div>
+          <div class="text-sm font-medium ${nd.rainfall_24h_mm >= 100 ? 'text-amber-400' : 'text-slate-200'}">${fmt(nd.rainfall_24h_mm)}<span class="text-[10px] text-slate-500 ml-1">mm</span></div>
+        </div>
+        <div class="bg-slate-900/30 p-2.5 rounded-lg border border-slate-800/40">
+          <div class="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Soil</div>
+          <div class="text-sm font-medium text-slate-200">${fmt(nd.soil_moisture_pct)}<span class="text-[10px] text-slate-500 ml-1">%</span></div>
+        </div>
+        <div class="bg-slate-900/30 p-2.5 rounded-lg border border-slate-800/40">
+          <div class="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Flow</div>
+          <div class="text-sm font-medium text-slate-200">${fmt(nd.flow_velocity_ms, 2)}<span class="text-[10px] text-slate-500 ml-1">m/s</span></div>
+        </div>
+      `;
+      Array.from(sGrid.children).forEach(c => {
+        c.classList.remove("flash-update");
+        void c.offsetWidth;
+        c.classList.add("flash-update");
+      });
+
+      // Update Progress Bars
+      const pn = (probs.NORMAL * 100).toFixed(0);
+      const pw = (probs.WATCH * 100).toFixed(0);
+      const pa = (probs.ALERT * 100).toFixed(0);
+      
+      el("cn-bn-" + nodeId).style.width = pn + "%";
+      el("cn-bw-" + nodeId).style.width = pw + "%";
+      el("cn-ba-" + nodeId).style.width = pa + "%";
+      el("cn-proba-" + nodeId).textContent = `${pn}% / ${pw}% / ${pa}%`;
+
+      if (nd.water_level_m !== undefined) pushChartPoint(nodeId, nd.water_level_m);
+    }
+
+    // ─── REST API Synchronizer ───
+    async function syncFromBackend() {
+      if (!backendApiUrl) return;
+      const btn = el("syncBtn").firstElementChild;
+      btn.classList.add("animate-spin");
+      
+      try {
+        const res = await fetch(`${backendApiUrl}/api/nodes`);
+        if (!res.ok) throw new Error(res.status);
+        const data = await res.json();
+        
+        if (data.nodes) {
+          data.nodes.forEach(node => {
+            const id = node.node_id;
+            if (!nodeData[id]) nodeData[id] = { node_id: id, node_label: id };
+            Object.assign(nodeData[id], {
+              node_label: node.node_label || id,
+              water_level_m: node.water_level_m,
+              rainfall_24h_mm: node.rainfall_24h_mm,
+              soil_moisture_pct: node.soil_moisture_pct,
+              flow_velocity_ms: node.flow_velocity_ms,
+              alert: node.alert_level || "NORMAL",
+              probs: node.probabilities || {},
+            });
+            renderNodeCard(id);
+          });
+          updateSummary();
+          updateAlertBanner();
+        }
+      } catch (err) {
+        logEvent("system", "WARN", `API Sync failed. Relying on WebSockets.`);
+      } finally {
+        setTimeout(() => btn.classList.remove("animate-spin"), 500);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  MQTT Connection with Exponential Backoff
+    // ═══════════════════════════════════════════════════════
+    function setMqttStatus(state, text) {
+      const wrap = el("mqttStatus");
+      const dot = el("mqttDot");
+      el("mqttLabel").textContent = text;
+      
+      if (state === "connected") {
+        wrap.className = "flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-[10px] text-emerald-400 rounded-full transition-colors";
+        dot.className = "h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]";
+      } else if (state === "error") {
+        wrap.className = "flex items-center gap-2 bg-red-500/10 border border-red-500/20 px-3 py-1 text-[10px] text-red-400 rounded-full transition-colors";
+        dot.className = "h-1.5 w-1.5 rounded-full bg-red-500";
+      } else {
+        wrap.className = "flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 px-3 py-1 text-[10px] text-amber-400 rounded-full transition-colors";
+        dot.className = "h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse";
+      }
+    }
+
+    let reconnectDelay = 1000;
+    const MAX_DELAY = 30000;
+
+    let mqttClient = mqtt.connect(BROKER_WSS, {
+      clientId: CLIENT_ID,
+      clean: true,
+      reconnectPeriod: reconnectDelay,
+      connectTimeout: 10000,
+    });
+
+    mqttClient.on("connect", () => {
+      reconnectDelay = 1000;
+      mqttClient.options.reconnectPeriod = reconnectDelay;
+      setMqttStatus("connected", "Connected");
+      mqttClient.subscribe([TOPIC_SENSOR_ALL, TOPIC_ALERT_ALL]);
+      syncFromBackend();
+    });
+
+    mqttClient.on("reconnect", () => {
+      setMqttStatus("connecting", `Reconnecting (${reconnectDelay/1000}s)...`);
+      reconnectDelay = Math.min(reconnectDelay * 1.5, MAX_DELAY);
+      mqttClient.options.reconnectPeriod = reconnectDelay;
+    });
+
+    mqttClient.on("error", (err) => {
+      setMqttStatus("error", "Error");
+      logEvent("system", "ALERT", `MQTT Error: ${err.message}`);
+    });
+
+    mqttClient.on("message", (topic, payload) => {
+      msgCount++;
+      try {
+        const data = JSON.parse(payload.toString());
+        const parts = topic.split("/");
+        const id = parts[2] || data.node_id;
+        
+        if (!nodeData[id]) nodeData[id] = { node_id: id, node_label: id, alert: "NORMAL", probs: {} };
+        
+        if (parts[1] === "sensor") {
+          Object.assign(nodeData[id], data);
+        } else if (parts[1] === "alert") {
+          nodeData[id].alert = data.alert_level || "NORMAL";
+          nodeData[id].probs = data.probabilities || {};
+        }
+        
+        renderNodeCard(id);
+        updateSummary();
+        updateAlertBanner();
+      } catch (e) {
+        logEvent("system", "WARN", "Invalid payload");
+      }
+    });
+
+  </script>
+</body>
+</html>
