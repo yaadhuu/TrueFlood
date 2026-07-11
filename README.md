@@ -12,9 +12,12 @@
 
 ## 🔗 Live Deployments
 
-*   **Live Dashboard (Frontend):** *[Insert your Vercel / GitHub Pages deployment link here]*
-*   **Live Prediction Server (Backend API):** *[Insert your Render / Railway deployment link here]*
-*   **ESP32 Telemetry Simulator (Wokwi Node-1):** *[Insert your Wokwi project link here]*
+*   **Live Dashboard (Frontend):** *Deploy `frontend/` to GitHub Pages or Vercel — update `PRODUCTION_BACKEND_URL` in `index.html` first*
+*   **Live Prediction Server (Backend API):** *Deploy via Render Web Service — see Cloud Deployment below*
+*   **ESP32 Telemetry Simulator (Wokwi):** *Open `firmware/sketch.ino` in [Wokwi](https://wokwi.com) with the diagrams in `firmware/`*
+
+> **After deploying:** hit `GET /api/health` on your Render URL and confirm `mqtt_connected: true` and `twilio_ready: true`.
+> Use `POST /api/test-alert` (with `X-Test-Key` header) to fire a real WhatsApp test without waiting for ESP32 hardware.
 
 ---
 
@@ -134,12 +137,16 @@ Open `http://localhost:3000` in your browser. Configure the API endpoint in the 
 
 ## 📡 REST API Reference
 
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `/api/health` | `GET` | Server health diagnostics and MQTT broker connection status |
-| `/api/nodes` | `GET` | List of all registered sensor nodes, current states, and ML classification |
-| `/api/nodes/<node_id>` | `GET` | Focus details and 20-point rolling history for a specific station |
-| `/api/history/<node_id>` | `GET` | Fetch raw telemetry trends of a single station for chart integration |
+| Endpoint | Method | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| `/api/health` | `GET` | — | Server health: status, mqtt_connected, twilio_ready, nodes_online |
+| `/api/nodes` | `GET` | — | All registered nodes with current state and ML classification |
+| `/api/nodes/<node_id>` | `GET` | — | Single node detail + 20-point rolling history |
+| `/api/history/<node_id>` | `GET` | — | Raw telemetry trend for chart integration |
+| `/api/alerts/log` | `GET` | — | Last 50 WhatsApp send attempts with Twilio codes |
+| `/api/version` | `GET` | — | Server version info |
+| `/api/simulate` | `POST` | DEMO_MODE=true | Inject synthetic sensor reading through full ML pipeline |
+| `/api/test-alert` | `POST` | X-Test-Key header | Fire a real WhatsApp message directly (bypasses ML/MQTT) |
 
 ---
 
@@ -161,12 +168,47 @@ Each simulated node is constructed using the following configuration:
 
 ### Backend Deployment (Render / Railway)
 1. Link your repository to Render or Railway.
-2. Select **Web Service** and choose **Python** as the runtime.
-3. Configure the build commands:
+2. Select **Web Service**, runtime **Python**.
+3. Configure build/start commands:
    *   **Build Command:** `pip install -r requirements.txt`
-   *   **Start Command:** `gunicorn --chdir backend mqtt_bridge:app --bind 0.0.0.0:$PORT`
-4. Set up your **Environment Variables** in the service settings matching the variables inside `backend/.env.example`.
+   *   **Start Command:** `gunicorn --chdir backend mqtt_bridge:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120`
+   > ⚠️ `--workers 1` is **required**. The MQTT bridge uses a single persistent TCP connection with a unique client_id. Multiple workers cause HiveMQ to disconnect one of them, making nodes appear to go offline intermittently.
+4. Set **Environment Variables** in the Render dashboard (not just in `.env.example` — those never reach Render):
+   | Variable | Value |
+   |---|---|
+   | `TWILIO_ACCOUNT_SID` | Your Twilio Account SID |
+   | `TWILIO_AUTH_TOKEN` | Your Twilio Auth Token |
+   | `TWILIO_FROM` | `whatsapp:+14155238886` (sandbox) |
+   | `TWILIO_TO` | `whatsapp:+91XXXXXXXXXX` (your number) |
+   | `TEST_SECRET` | A random string for `/api/test-alert` |
+   | `MQTT_BROKER` | `broker.hivemq.com` |
+   | `MQTT_PORT` | `8883` (TLS) |
+5. **Twilio Sandbox Rejoin** — The sandbox WhatsApp session expires after **3 days of inactivity**. If alerts stop working, go to your phone and send `join <your-sandbox-code>` to **+1 415 523 8886**. Find your sandbox code at Twilio Console → Messaging → Try it out → Send a WhatsApp message.
+6. **Cold-start on Render free tier** — The service sleeps after ~15 min of inactivity. First request after sleep can take 30–50 s. Use a free uptime monitor (e.g. [cron-job.org](https://cron-job.org)) to ping `GET /api/health` every 10 min.
 
 ### Frontend Deployment (Vercel / GitHub Pages)
-*   **Vercel:** Link your repository, specify the root directory as `frontend` (or set `frontend` as the output directory), and deploy.
-*   **GitHub Pages:** Publish the content of `/frontend` directly to your `gh-pages` branch.
+1. Open `frontend/index.html` and set `PRODUCTION_BACKEND_URL` to your actual Render URL (line ~340).
+2. **Vercel:** Link your repository, set root directory to `frontend`, deploy.
+3. **GitHub Pages:** Push `frontend/` content to your `gh-pages` branch.
+
+### Verifying the deployment
+```bash
+# 1. Health check
+curl https://your-service.onrender.com/api/health
+# Expect: {"status":"ok", "mqtt_connected":true, "twilio_ready":true, ...}
+
+# 2. Test WhatsApp alert (replace SECRET with your TEST_SECRET)
+curl -X POST https://your-service.onrender.com/api/test-alert \
+  -H 'X-Test-Key: SECRET' -H 'Content-Type: application/json' \
+  -d '{"node_id":"test"}'
+# Expect: {"sent":true, "sid":"SM..."} — and a WhatsApp message on your phone
+
+# 3. Check alert attempt log
+curl https://your-service.onrender.com/api/alerts/log
+# If sent:false, inspect twilio_code and twilio_msg for the root cause
+
+# 4. Inject a simulated sensor reading (set DEMO_MODE=true first)
+curl -X POST https://your-service.onrender.com/api/simulate \
+  -H 'Content-Type: application/json' \
+  -d '{"node_id":"sim-1","water_level_m":35,"rainfall_24h_mm":32,"soil_moisture_pct":91,"flow_velocity_ms":3.5,"turbidity_ntu":720}'
+```
