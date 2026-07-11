@@ -1,29 +1,15 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-slate-950">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FloodSense – Multi-Node Dashboard</title>
+  <title>FloodSense – Multi-Node Hydro-Telemetry</title>
+  <meta name="description" content="Real-time multi-node flood early-warning dashboard. Live water level, rainfall, soil moisture, and ML-based flood risk classification across all sensor stations.">
 
-  <!-- Google Fonts -->
+  <!-- Google Fonts: Archivo (headings) + JetBrains Mono (data) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          },
-        }
-      }
-    }
-  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 
   <!-- MQTT.js over WebSocket -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.0.5/mqtt.min.js"></script>
@@ -31,155 +17,883 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 
   <style>
-    /* Premium Glassmorphism & Custom scrollbar */
-    .glass-panel {
-      background: rgba(15, 23, 42, 0.6);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    /* ═══════════════════════════════════════════════════
+       DESIGN TOKENS  — Hydro-instrument aesthetic
+       ═══════════════════════════════════════════════════ */
+    :root {
+      --bg:          #EEF2F1;
+      --surface:     #FFFFFF;
+      --border:      #D8DEDC;
+      --border-deep: #BCC6C3;
+      --ink:         #16262B;
+      --ink-mid:     #3D5458;
+      --ink-muted:   #6E8489;
+      --accent:      #1E6E7A;
+      --accent-light:#E4F2F4;
+      --normal:      #4F7A5C;
+      --normal-bg:   #EBF3EE;
+      --watch:       #C97A2E;
+      --watch-bg:    #FDF2E4;
+      --alert:       #A63D2E;
+      --alert-bg:    #FAECE9;
+      --shadow:      0 1px 3px rgba(22,38,43,0.08), 0 1px 2px rgba(22,38,43,0.04);
+      --radius:      10px;
+      --font-head:   'Archivo', system-ui, sans-serif;
+      --font-mono:   'JetBrains Mono', 'Courier New', monospace;
     }
-    .custom-scrollbar::-webkit-scrollbar {
-      width: 4px;
-      height: 4px;
+
+    /* ═══════════════════════════════════════════════════
+       RESET & BASE
+       ═══════════════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { height: 100%; }
+
+    body {
+      font-family: var(--font-head);
+      background-color: var(--bg);
+      color: var(--ink);
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+      /* Subtle topographic contour background — SVG data-URI, ~4% opacity */
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cg fill='none' stroke='%231E6E7A' stroke-width='0.8' opacity='0.06'%3E%3Cellipse cx='200' cy='200' rx='190' ry='80'/%3E%3Cellipse cx='200' cy='200' rx='150' ry='55'/%3E%3Cellipse cx='200' cy='200' rx='110' ry='35'/%3E%3Cellipse cx='200' cy='200' rx='70' ry='20'/%3E%3Cellipse cx='200' cy='200' rx='30' ry='10'/%3E%3Cellipse cx='80' cy='100' rx='70' ry='40'/%3E%3Cellipse cx='80' cy='100' rx='45' ry='25'/%3E%3Cellipse cx='320' cy='300' rx='80' ry='45'/%3E%3Cellipse cx='320' cy='300' rx='50' ry='28'/%3E%3C/g%3E%3C/svg%3E");
+      background-size: 400px 400px;
     }
-    .custom-scrollbar::-webkit-scrollbar-track {
+
+    /* ═══════════════════════════════════════════════════
+       SCROLLBAR
+       ═══════════════════════════════════════════════════ */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-deep); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--ink-muted); }
+
+    /* ═══════════════════════════════════════════════════
+       FOCUS STATES — accessibility
+       ═══════════════════════════════════════════════════ */
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+
+    /* ═══════════════════════════════════════════════════
+       ALERT BANNER
+       ═══════════════════════════════════════════════════ */
+    #alertBanner {
+      display: none;
+      background: var(--alert-bg);
+      border-bottom: 2px solid var(--alert);
+      padding: 10px 24px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--alert);
+      letter-spacing: 0.02em;
+      position: sticky;
+      top: 0;
+      z-index: 60;
+    }
+    #alertBanner.visible { display: block; }
+    #alertBanner .banner-inner {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ═══════════════════════════════════════════════════
+       API DISCONNECTED BANNER
+       ═══════════════════════════════════════════════════ */
+    #apiBanner {
+      display: none;
+      background: var(--watch-bg);
+      border-bottom: 1px solid var(--watch);
+      padding: 8px 24px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--watch);
+    }
+    #apiBanner.visible { display: block; }
+
+    /* ═══════════════════════════════════════════════════
+       HEADER
+       ═══════════════════════════════════════════════════ */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      padding: 0 24px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: var(--shadow);
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--accent-light);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .brand-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--ink);
+      line-height: 1.1;
+    }
+
+    .brand-sub {
+      font-size: 10px;
+      font-weight: 400;
+      color: var(--ink-muted);
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-top: 1px;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* API URL control */
+    .api-control {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 11px;
+    }
+    @media (min-width: 640px) { .api-control { display: flex; } }
+
+    .api-control label {
+      color: var(--ink-muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    #apiUrlInput {
       background: transparent;
+      border: none;
+      outline: none;
+      color: var(--ink-mid);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      width: 180px;
     }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: rgba(51, 65, 85, 0.5);
-      border-radius: 2px;
+
+    #syncBtn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--ink-muted);
+      padding: 2px;
+      display: flex;
+      align-items: center;
+      border-radius: 4px;
+      transition: color 0.15s;
     }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-      background: rgba(100, 116, 139, 0.8);
+    #syncBtn:hover { color: var(--accent); }
+    #syncBtn.spinning { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* MQTT status pill */
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--ink-mid);
+      background: var(--surface);
+      transition: all 0.2s;
     }
+    .status-pill.connected {
+      border-color: var(--normal);
+      color: var(--normal);
+      background: var(--normal-bg);
+    }
+    .status-pill.error {
+      border-color: var(--alert);
+      color: var(--alert);
+      background: var(--alert-bg);
+    }
+    .status-pill.connecting {
+      border-color: var(--watch);
+      color: var(--watch);
+      background: var(--watch-bg);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--border-deep);
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+    .status-pill.connected .status-dot {
+      background: var(--normal);
+      box-shadow: 0 0 0 3px rgba(79,122,92,0.2);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    .status-pill.error .status-dot { background: var(--alert); }
+    .status-pill.connecting .status-dot { background: var(--watch); animation: pulse-dot 1s ease-in-out infinite; }
+
+    @keyframes pulse-dot {
+      0%, 100% { box-shadow: 0 0 0 2px rgba(79,122,92,0.15); }
+      50%       { box-shadow: 0 0 0 5px rgba(79,122,92,0.05); }
+    }
+
+    /* ═══════════════════════════════════════════════════
+       DEMO PANEL (only visible with ?demo=1)
+       ═══════════════════════════════════════════════════ */
+    #demoPanel {
+      display: none;
+      background: #FFF8E6;
+      border: 1px dashed var(--watch);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 24px;
+    }
+    #demoPanel.visible { display: block; }
+    .demo-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--watch);
+      margin-bottom: 12px;
+    }
+    .demo-fields {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .demo-field label {
+      display: block;
+      font-size: 10px;
+      font-family: var(--font-mono);
+      color: var(--ink-muted);
+      margin-bottom: 3px;
+      text-transform: uppercase;
+    }
+    .demo-field input {
+      width: 100%;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--ink);
+      background: var(--surface);
+    }
+    .demo-field input:focus { border-color: var(--accent); outline: none; }
+    #demoSubmitBtn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font-head);
+      transition: background 0.15s;
+    }
+    #demoSubmitBtn:hover { background: #195d68; }
+    #demoResult {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      margin-top: 8px;
+      color: var(--ink-mid);
+      min-height: 16px;
+    }
+
+    /* ═══════════════════════════════════════════════════
+       MAIN LAYOUT
+       ═══════════════════════════════════════════════════ */
+    main {
+      flex: 1;
+      padding: 28px 24px;
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* ═══════════════════════════════════════════════════
+       SECTION LABELS
+       ═══════════════════════════════════════════════════ */
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--ink-muted);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ═══════════════════════════════════════════════════
+       OVERVIEW STAT CARDS
+       ═══════════════════════════════════════════════════ */
+    .overview-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-bottom: 32px;
+    }
+    @media (min-width: 640px) { .overview-grid { grid-template-columns: repeat(4, 1fr); } }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      box-shadow: var(--shadow);
+    }
+    .stat-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--ink-muted);
+      margin-bottom: 10px;
+    }
+    .stat-value {
+      font-family: var(--font-mono);
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--ink);
+      line-height: 1;
+    }
+    .stat-card.stat-alert { border-top: 3px solid var(--alert); }
+    .stat-card.stat-alert .stat-value { color: var(--alert); }
+    .stat-card.stat-watch { border-top: 3px solid var(--watch); }
+    .stat-card.stat-watch .stat-value { color: var(--watch); }
+    .stat-card.stat-accent { border-top: 3px solid var(--accent); }
+    .stat-card.stat-accent .stat-value { color: var(--accent); }
+
+    /* ═══════════════════════════════════════════════════
+       NODE GRID
+       ═══════════════════════════════════════════════════ */
+    .node-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      margin-bottom: 32px;
+    }
+    @media (min-width: 640px)  { .node-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 1024px) { .node-grid { grid-template-columns: repeat(3, 1fr); } }
+
+    /* ═══════════════════════════════════════════════════
+       EMPTY STATE
+       ═══════════════════════════════════════════════════ */
+    .empty-state {
+      grid-column: 1 / -1;
+      background: var(--surface);
+      border: 1px dashed var(--border-deep);
+      border-radius: var(--radius);
+      padding: 56px 24px;
+      text-align: center;
+    }
+    .empty-icon {
+      width: 48px;
+      height: 48px;
+      background: var(--accent-light);
+      border: 1px solid var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      margin: 0 auto 16px;
+    }
+    .empty-state h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 6px;
+    }
+    .empty-state p {
+      font-size: 12px;
+      color: var(--ink-muted);
+      max-width: 320px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* ═══════════════════════════════════════════════════
+       NODE CARD
+       ═══════════════════════════════════════════════════ */
+    .node-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      transition: border-color 0.25s, box-shadow 0.25s;
+    }
+    .node-card.state-alert {
+      border-color: var(--alert);
+      box-shadow: 0 0 0 2px rgba(166,61,46,0.12), var(--shadow);
+    }
+    .node-card.state-watch {
+      border-color: var(--watch);
+      box-shadow: 0 0 0 2px rgba(201,122,46,0.10), var(--shadow);
+    }
+    .node-card.state-normal {
+      border-color: var(--border);
+    }
+
+    /* Card header strip */
+    .card-header {
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .card-header.state-alert { background: var(--alert-bg); }
+    .card-header.state-watch { background: var(--watch-bg); }
+    .card-header.state-normal { background: var(--normal-bg); }
+
+    .card-node-info { min-width: 0; }
+    .card-node-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .node-live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--normal);
+      animation: pulse-live 2.5s ease-in-out infinite;
+    }
+    .state-alert .node-live-dot { background: var(--alert); animation: pulse-alert 1s ease-in-out infinite; }
+    .state-watch .node-live-dot { background: var(--watch); animation: pulse-live 1.5s ease-in-out infinite; }
+    @keyframes pulse-live  { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    @keyframes pulse-alert { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    .card-node-id {
+      font-size: 9px;
+      font-family: var(--font-mono);
+      color: var(--ink-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-top: 2px;
+    }
+
+    .alert-badge {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      border: 1px solid;
+    }
+    .badge-normal { background: var(--normal-bg); color: var(--normal); border-color: rgba(79,122,92,0.4); }
+    .badge-watch  { background: var(--watch-bg);  color: var(--watch);  border-color: rgba(201,122,46,0.4); }
+    .badge-alert  { background: var(--alert-bg);  color: var(--alert);  border-color: rgba(166,61,46,0.4); }
+
+    /* Card body */
+    .card-body { padding: 16px; }
+
+    /* Gauge + sensors row */
+    .card-main-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    /* Radial gauge */
+    .gauge-wrap {
+      flex-shrink: 0;
+    }
+    .gauge-svg { display: block; }
+    .gauge-center-text {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      fill: var(--ink);
+    }
+    .gauge-unit {
+      font-family: var(--font-mono);
+      fill: var(--ink-muted);
+    }
+
+    /* Sensor grid */
+    .sensor-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .sensor-cell {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 8px 10px;
+    }
+    .sensor-lbl {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--ink-muted);
+      margin-bottom: 3px;
+    }
+    .sensor-val {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink);
+      line-height: 1;
+    }
+    .sensor-unit {
+      font-size: 10px;
+      font-weight: 400;
+      color: var(--ink-muted);
+      margin-left: 2px;
+    }
+    .sensor-val.high { color: var(--alert); }
+    .sensor-val.med  { color: var(--watch); }
+
+    /* ML prob segmented bar */
+    .prob-section { margin-bottom: 12px; }
+    .prob-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+    .prob-lbl {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--ink-muted);
+    }
+    .prob-vals {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      color: var(--ink-muted);
+    }
+    .prob-bar-track {
+      height: 5px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      display: flex;
+      overflow: hidden;
+    }
+    .pb-normal { background: var(--normal); transition: width 0.7s cubic-bezier(.4,0,.2,1); }
+    .pb-watch  { background: var(--watch);  transition: width 0.7s cubic-bezier(.4,0,.2,1); }
+    .pb-alert  { background: var(--alert);  transition: width 0.7s cubic-bezier(.4,0,.2,1); }
+
+    /* Sparkline */
+    .sparkline-wrap {
+      height: 44px;
+      width: 100%;
+      position: relative;
+    }
+    .sparkline-label {
+      font-size: 8px;
+      font-family: var(--font-mono);
+      color: var(--ink-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 3px;
+    }
+
+    /* Card footer timestamp */
+    .card-footer {
+      border-top: 1px solid var(--border);
+      padding: 8px 16px;
+      font-size: 9px;
+      font-family: var(--font-mono);
+      color: var(--ink-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Flash update animation */
     @keyframes flash-update {
-      0% { background-color: rgba(56, 189, 248, 0.15); }
+      0%   { background-color: rgba(30,110,122,0.10); }
       100% { background-color: transparent; }
     }
-    .flash-update {
-      animation: flash-update 0.8s ease-out;
+    .flash-update { animation: flash-update 0.6s ease-out; }
+
+    /* ═══════════════════════════════════════════════════
+       EVENT LOG
+       ═══════════════════════════════════════════════════ */
+    .log-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
     }
-    .prob-bar {
-      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    .log-header {
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
+    .log-header-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--ink-muted);
+    }
+    #clearLogBtn {
+      font-size: 10px;
+      color: var(--ink-muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: var(--font-head);
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: color 0.15s;
+    }
+    #clearLogBtn:hover { color: var(--alert); }
+
+    #eventLog {
+      height: 152px;
+      overflow-y: auto;
+      padding: 10px 16px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.6;
+    }
+    .log-row {
+      display: flex;
+      gap: 12px;
+      padding: 1px 0;
+    }
+    .log-ts   { color: var(--ink-muted); white-space: nowrap; flex-shrink: 0; }
+    .log-node { color: var(--ink-mid); width: 70px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .log-msg  { flex: 1; word-break: break-all; }
+    .log-msg.level-ALERT  { color: var(--alert); }
+    .log-msg.level-WATCH  { color: var(--watch); }
+    .log-msg.level-NORMAL { color: var(--normal); }
+    .log-msg.level-INFO   { color: var(--accent); }
+    .log-msg.level-WARN   { color: var(--watch); }
+
+    /* ═══════════════════════════════════════════════════
+       FOOTER
+       ═══════════════════════════════════════════════════ */
+    footer {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--ink-muted);
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer .footer-mono { font-family: var(--font-mono); }
   </style>
 </head>
-<body class="h-full text-slate-200 flex flex-col font-sans antialiased selection:bg-blue-500/30 selection:text-blue-200">
+<body>
 
-  <!-- ── Alert Banner ── -->
-  <div id="alertBanner" class="hidden bg-red-500/10 border-b border-red-500/50 py-2.5 px-6 text-center text-sm font-semibold text-red-400 backdrop-blur-md z-50 transition-all duration-300">
-    <span class="inline-flex items-center gap-2 drop-shadow-[0_0_8px_rgba(248,113,113,0.5)]">
-      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+  <!-- ── Flood Alert Banner (aria-live for screen readers) ── -->
+  <div id="alertBanner" role="alert" aria-live="polite">
+    <div class="banner-inner">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
       </svg>
-      CRITICAL FLOOD WARNING ACTIVE: <span id="alertNodes" class="text-white tracking-wide"></span>
-    </span>
+      CRITICAL FLOOD WARNING — <span id="alertNodes" style="margin-left:4px;"></span>
+    </div>
+  </div>
+
+  <!-- ── API Disconnected Banner ── -->
+  <div id="apiBanner" role="status" aria-live="polite">
+    <span id="apiBannerText">⚠ REST API Disconnected — retrying…</span>
   </div>
 
   <!-- ── Header ── -->
-  <header class="glass-panel sticky top-0 z-40 h-16 flex items-center justify-between px-6 border-b-0">
-    <div class="flex items-center gap-3">
-      <div class="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.15)]">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <header>
+    <div class="header-brand">
+      <div class="brand-icon" aria-hidden="true">
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/>
           <path d="M3 12s1.5-3 4.5-3 4.5 6 9 6 4.5-3 4.5-3"/>
           <path d="M12 7v2m0 6v2"/>
         </svg>
       </div>
       <div>
-        <h1 class="text-base font-semibold tracking-tight text-slate-100 flex items-center gap-2">
-          FloodSense 
-          <span class="text-[10px] font-medium text-slate-400 bg-slate-800/50 px-2 py-0.5 rounded-full border border-slate-700/50">Multi-Node</span>
-        </h1>
-        <p class="text-[10px] text-slate-500">AI-Powered Hydro-Telemetry Platform</p>
+        <div class="brand-name">FloodSense</div>
+        <div class="brand-sub">Multi-Node Hydro-Telemetry</div>
       </div>
     </div>
 
-    <div class="flex items-center gap-4">
-      <div class="hidden md:flex items-center gap-2 bg-slate-900/50 border border-slate-800 rounded-lg px-3 py-1.5 text-xs">
-        <span class="text-slate-500 font-mono">API:</span>
-        <input id="apiUrlInput" type="text" value="http://localhost:8080" placeholder="API URL" class="bg-transparent border-none focus:outline-none text-slate-300 w-36 font-mono text-[10px]" title="Configure REST endpoint">
-        <button id="syncBtn" class="text-slate-500 hover:text-slate-300 transition-colors" title="Sync data">
-          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H17" />
+    <div class="header-controls">
+      <!-- API URL override (dev use) -->
+      <div class="api-control" title="Configure REST API endpoint (local dev override)">
+        <label for="apiUrlInput">API</label>
+        <input id="apiUrlInput" type="text" placeholder="https://your-render-url.onrender.com" aria-label="Backend API URL">
+        <button id="syncBtn" aria-label="Sync data from backend">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H17"/>
           </svg>
         </button>
       </div>
-      <div id="mqttStatus" class="flex items-center gap-2 bg-slate-900/50 border border-slate-800 px-3 py-1.5 rounded-full text-[11px] text-slate-400 transition-colors duration-300">
-        <span id="mqttDot" class="h-1.5 w-1.5 rounded-full bg-slate-600 transition-colors duration-300"></span>
-        <span id="mqttLabel" class="font-medium tracking-wide">Connecting...</span>
+
+      <!-- MQTT connection state -->
+      <div id="mqttStatus" class="status-pill connecting" role="status">
+        <span class="status-dot" id="mqttDot"></span>
+        <span id="mqttLabel">Connecting…</span>
       </div>
     </div>
   </header>
 
-  <!-- ── Main Layout ── -->
-  <main class="flex-1 overflow-y-auto p-6 max-w-7xl w-full mx-auto space-y-8">
+  <!-- ── Main ── -->
+  <main>
 
-    <!-- ── System Overview ── -->
-    <section>
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        <div class="glass-panel p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden group">
-          <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
-            <svg class="h-28 w-28 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-          </div>
-          <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Active Nodes</span>
-          <span id="sumNodes" class="text-3xl font-light text-slate-100 font-mono mt-3 drop-shadow-sm">0</span>
+    <!-- Demo panel: only shown with ?demo=1 in URL -->
+    <div id="demoPanel" aria-label="Development simulation panel">
+      <div class="demo-title">⚙ Dev Mode — Simulate Sensor Reading (not visible on public dashboard)</div>
+      <div class="demo-fields">
+        <div class="demo-field">
+          <label>Node ID</label>
+          <input id="d_node_id" value="sim-node-1">
         </div>
-
-        <div class="glass-panel p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden group border-b-2 border-b-red-500/30">
-          <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
-            <svg class="h-28 w-28 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-          </div>
-          <span class="text-[10px] font-semibold uppercase tracking-wider text-red-400/80">Critical Alerts</span>
-          <span id="sumAlert" class="text-3xl font-light text-red-400 font-mono mt-3 drop-shadow-[0_0_8px_rgba(248,113,113,0.3)]">0</span>
+        <div class="demo-field">
+          <label>Water Level (m)</label>
+          <input id="d_water" type="number" step="0.1" value="35.0">
         </div>
-
-        <div class="glass-panel p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden group border-b-2 border-b-amber-500/30">
-          <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
-            <svg class="h-28 w-28 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-          </div>
-          <span class="text-[10px] font-semibold uppercase tracking-wider text-amber-400/80">Sensors Watch</span>
-          <span id="sumWatch" class="text-3xl font-light text-amber-400 font-mono mt-3 drop-shadow-[0_0_8px_rgba(251,191,36,0.3)]">0</span>
+        <div class="demo-field">
+          <label>Rainfall 24h (mm)</label>
+          <input id="d_rain" type="number" step="0.5" value="32.0">
         </div>
-
-        <div class="glass-panel p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden group">
-          <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
-            <svg class="h-28 w-28 text-slate-100" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
-          </div>
-          <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Total Packets</span>
-          <span id="sumMessages" class="text-3xl font-light text-slate-300 font-mono mt-3">0</span>
+        <div class="demo-field">
+          <label>Soil Moisture (%)</label>
+          <input id="d_soil" type="number" step="1" value="91.0">
         </div>
+        <div class="demo-field">
+          <label>Flow Velocity (m/s)</label>
+          <input id="d_flow" type="number" step="0.1" value="3.5">
+        </div>
+        <div class="demo-field">
+          <label>Turbidity (NTU)</label>
+          <input id="d_turb" type="number" step="10" value="720">
+        </div>
+      </div>
+      <button id="demoSubmitBtn">▶ Inject Simulated Reading</button>
+      <div id="demoResult"></div>
+    </div>
 
+    <!-- ── Overview Stats ── -->
+    <section aria-label="System overview">
+      <div class="section-label">Station Overview</div>
+      <div class="overview-grid">
+        <div class="stat-card stat-accent">
+          <div class="stat-label">Active Nodes</div>
+          <div class="stat-value" id="sumNodes">0</div>
+        </div>
+        <div class="stat-card stat-alert">
+          <div class="stat-label">Critical Alerts</div>
+          <div class="stat-value" id="sumAlert">0</div>
+        </div>
+        <div class="stat-card stat-watch">
+          <div class="stat-label">Watch Status</div>
+          <div class="stat-value" id="sumWatch">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Packets</div>
+          <div class="stat-value" id="sumMessages">0</div>
+        </div>
       </div>
     </section>
 
-    <!-- ── Live Sensor Grid ── -->
-    <section>
-      <div id="nodeGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <!-- Empty State -->
-        <div id="emptyState" class="col-span-full glass-panel py-20 px-6 text-center rounded-2xl flex flex-col items-center justify-center">
-          <div class="p-4 bg-slate-900/50 rounded-full border border-slate-800/50 text-slate-600 animate-pulse mb-4">
-            <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="currentColor"/>
+    <!-- ── Live Node Grid ── -->
+    <section aria-label="Live sensor stations">
+      <div class="section-label">Live Sensor Stations</div>
+      <div class="node-grid" id="nodeGrid">
+        <!-- Empty state -->
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon" aria-hidden="true">
+            <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/>
+              <path d="M12 8v4m0 4h.01"/>
             </svg>
           </div>
-          <h3 class="text-sm font-medium text-slate-300">Awaiting Hydrological Feeds</h3>
-          <p class="text-xs text-slate-500 max-w-xs mx-auto mt-2">Ensure the Python MQTT bridge is running and Wokwi nodes are emitting telemetry.</p>
+          <h3>Awaiting Station Data</h3>
+          <p>MQTT bridge is connecting to HiveMQ. Node cards will appear as sensor telemetry arrives. Use <code>?demo=1</code> to inject a test reading.</p>
         </div>
       </div>
     </section>
 
     <!-- ── Event Log ── -->
-    <section>
-      <div class="glass-panel rounded-2xl overflow-hidden">
-        <div class="bg-slate-900/40 px-5 py-3 border-b border-slate-800/50 flex items-center justify-between text-xs text-slate-400">
-          <span class="font-medium tracking-wide">Live Events Console</span>
-          <button id="clearLogBtn" class="text-slate-500 hover:text-slate-300 transition-colors">Clear</button>
+    <section aria-label="Live event console">
+      <div class="section-label">Live Events Console</div>
+      <div class="log-panel">
+        <div class="log-header">
+          <span class="log-header-label">System Log</span>
+          <button id="clearLogBtn">Clear</button>
         </div>
-        <div id="eventLog" class="h-40 overflow-y-auto px-5 py-3 font-mono text-[11px] leading-relaxed space-y-1 custom-scrollbar">
-          <div class="text-slate-500">[System] Initializing listener. Waiting for events...</div>
+        <div id="eventLog" role="log" aria-label="Event log">
+          <div class="log-row">
+            <span class="log-ts">--:--:--</span>
+            <span class="log-node">system</span>
+            <span class="log-msg level-INFO">Initializing listener. Waiting for events…</span>
+          </div>
         </div>
       </div>
     </section>
@@ -187,93 +901,171 @@
   </main>
 
   <!-- ── Footer ── -->
-  <footer class="h-12 border-t border-slate-900/50 flex items-center justify-between px-6 text-[10px] text-slate-600 bg-slate-950/80 backdrop-blur-md">
+  <footer>
     <span>© 2026 FloodSense</span>
-    <span class="font-mono">HiveMQ + Random Forest Classifier</span>
+    <span class="footer-mono">HiveMQ · Random Forest · Twilio WhatsApp</span>
   </footer>
 
   <script>
     // ═══════════════════════════════════════════════════════
-    //  Configuration & Initialization
+    //  CONFIG
+    //  ↓↓↓ Replace this with your actual Render service URL ↓↓↓
     // ═══════════════════════════════════════════════════════
-    const BROKER_WSS = "wss://broker.hivemq.com:8884/mqtt";
-    const TOPIC_SENSOR_ALL = "flood/sensor/+";
-    const TOPIC_ALERT_ALL  = "flood/alert/+";
-    const CLIENT_ID        = "dashboard-" + Math.random().toString(16).slice(2, 8);
+    const PRODUCTION_BACKEND_URL = "https://floodsense.onrender.com"; // ← YOUR RENDER URL
+    const BROKER_WSS        = "wss://broker.hivemq.com:8884/mqtt";
+    const TOPIC_SENSOR_ALL  = "flood/sensor/+";
+    const TOPIC_ALERT_ALL   = "flood/alert/+";
+    const CLIENT_ID         = "dashboard-" + Math.random().toString(16).slice(2, 10);
 
+    // ─── State ───
     const nodeData = {};
-    let msgCount = 0;
-    const charts = {};
+    let msgCount   = 0;
+    const charts   = {};
 
-    const el = id => document.getElementById(id);
+    // ─── Demo mode: active when URL contains ?demo=1 ───
+    const DEMO_MODE = new URLSearchParams(location.search).get("demo") === "1";
 
-    let backendApiUrl = localStorage.getItem("flood_backend_url") || "http://localhost:8080";
-    el("apiUrlInput").value = backendApiUrl;
+    // ─── API URL: localStorage override, else production constant ───
+    let backendApiUrl = localStorage.getItem("flood_backend_url") || PRODUCTION_BACKEND_URL;
 
-    el("apiUrlInput").addEventListener("change", (e) => {
+    const $ = id => document.getElementById(id);
+
+    $("apiUrlInput").value = backendApiUrl;
+    if (DEMO_MODE) { $("demoPanel").classList.add("visible"); }
+
+    // ─── API URL change handler ───
+    $("apiUrlInput").addEventListener("change", e => {
       backendApiUrl = e.target.value.trim().replace(/\/$/, "");
       localStorage.setItem("flood_backend_url", backendApiUrl);
-      logEvent("system", "INFO", `REST API endpoint updated: ${backendApiUrl}`);
+      logEvent("system", "INFO", `REST endpoint updated → ${backendApiUrl}`);
+      apiSyncWithBackoff(0);
     });
 
-    el("syncBtn").addEventListener("click", syncFromBackend);
-    el("clearLogBtn").addEventListener("click", () => {
-      el("eventLog").innerHTML = `<div class="text-slate-500">[System] Console cleared.</div>`;
+    $("syncBtn").addEventListener("click", () => apiSyncWithBackoff(0));
+    $("clearLogBtn").addEventListener("click", () => {
+      $("eventLog").innerHTML = '<div class="log-row"><span class="log-ts">--:--:--</span><span class="log-node">system</span><span class="log-msg level-INFO">Console cleared.</span></div>';
     });
 
-    function fmt(val, dec = 1) {
-      return (val == null) ? "—" : Number(val).toFixed(dec);
-    }
-
+    // ─── Helpers ───
+    function fmt(val, dec = 1) { return (val == null) ? "—" : Number(val).toFixed(dec); }
     function timeNow() {
-      return new Date().toLocaleTimeString("en-GB", { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      return new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     }
 
     // ─── Logger ───
     function logEvent(nodeId, level, msg) {
-      const log = el("eventLog");
-      const div = document.createElement("div");
-      
-      let colorClass = "text-slate-500";
-      if (level === "ALERT") colorClass = "text-red-400";
-      else if (level === "WATCH") colorClass = "text-amber-400";
-      else if (level === "NORMAL") colorClass = "text-emerald-400";
-      else if (level === "INFO") colorClass = "text-blue-400";
-
-      div.className = "flex items-start gap-4 hover:bg-slate-800/20 px-2 py-0.5 rounded transition-colors";
-      div.innerHTML = `
-        <span class="text-slate-600 shrink-0 select-none">${timeNow()}</span>
-        <span class="text-slate-400 shrink-0 w-16 truncate" title="${nodeId}">${nodeId}</span>
-        <span class="${colorClass} flex-1 break-all">${msg}</span>
+      const log  = $("eventLog");
+      const row  = document.createElement("div");
+      row.className = "log-row";
+      row.innerHTML = `
+        <span class="log-ts">${timeNow()}</span>
+        <span class="log-node" title="${nodeId}">${nodeId}</span>
+        <span class="log-msg level-${level}">${msg}</span>
       `;
-      log.prepend(div);
-      while (log.children.length > 100) log.removeChild(log.lastChild);
+      log.prepend(row);
+      while (log.children.length > 120) log.removeChild(log.lastChild);
     }
 
-    // ─── Banner Updates ───
+    // ─── Alert Banner ───
     function updateAlertBanner() {
-      const alertNodes = Object.values(nodeData).filter(n => n.alert === "ALERT").map(n => n.node_label);
-      const banner = el("alertBanner");
+      const alertNodes = Object.values(nodeData)
+        .filter(n => n.alert === "ALERT")
+        .map(n => n.node_label || n.node_id);
+      const banner = $("alertBanner");
       if (alertNodes.length > 0) {
-        banner.classList.remove("hidden");
-        el("alertNodes").textContent = alertNodes.join(", ");
+        banner.classList.add("visible");
+        $("alertNodes").textContent = alertNodes.join(" · ");
       } else {
-        banner.classList.add("hidden");
+        banner.classList.remove("visible");
       }
     }
 
-    // ─── Metrics Panel Updates ───
+    // ─── Summary ───
     function updateSummary() {
       const nodes = Object.values(nodeData);
-      el("sumNodes").textContent = nodes.length;
-      el("sumAlert").textContent = nodes.filter(n => n.alert === "ALERT").length;
-      el("sumWatch").textContent = nodes.filter(n => n.alert === "WATCH").length;
-      el("sumMessages").textContent = msgCount;
+      $("sumNodes").textContent    = nodes.length;
+      $("sumAlert").textContent    = nodes.filter(n => n.alert === "ALERT").length;
+      $("sumWatch").textContent    = nodes.filter(n => n.alert === "WATCH").length;
+      $("sumMessages").textContent = msgCount;
     }
 
-    // ─── Chart.js Helper ───
-    function getOrCreateChart(nodeId, canvasEl) {
+    // ═══════════════════════════════════════════════════════
+    //  RADIAL GAUGE (SVG, no canvas)
+    // ═══════════════════════════════════════════════════════
+    // Returns SVG string for a gauge dial.
+    // value: 0–100 (percentage of max scale)
+    // state: "normal"|"watch"|"alert"
+    function buildGaugeSVG(value, state, centerLabel, unit) {
+      const W = 90, H = 56, R = 38, CX = 45, CY = 48;
+      const minAngle = -200, maxAngle = 20;   // degrees, from 9-o'clock sweep
+
+      // Clamp value 0–100
+      const v    = Math.max(0, Math.min(100, value || 0));
+      const frac = v / 100;
+      const needleAngle = minAngle + frac * (maxAngle - minAngle);
+
+      // Arc path helper (SVG arc)
+      function polarToCart(cx, cy, r, angleDeg) {
+        const rad = (angleDeg - 90) * (Math.PI / 180);
+        return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+      }
+      function arcPath(cx, cy, r, startDeg, endDeg, color) {
+        const s = polarToCart(cx, cy, r, startDeg);
+        const e = polarToCart(cx, cy, r, endDeg);
+        const large = (endDeg - startDeg) > 180 ? 1 : 0;
+        return `<path d="M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}"
+                  fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round"/>`;
+      }
+
+      // Arc zones (0–60% normal, 60–80% watch, 80–100% alert)
+      const startDeg = minAngle - 90 + 90;  // convert to SVG coord
+      const arcS = -200 + 90;               // = -110
+      const arcE =   20 + 90;               // =  110
+      const w60  = arcS + 0.60 * (arcE - arcS);
+      const w80  = arcS + 0.80 * (arcE - arcS);
+      const nEnd = arcS + frac * (arcE - arcS);
+
+      // Track
+      const track = arcPath(CX, CY, R, arcS, arcE, "#D8DEDC");
+      // Filled value arc
+      let fillColor = "#4F7A5C";
+      if (state === "alert") fillColor = "#A63D2E";
+      else if (state === "watch") fillColor = "#C97A2E";
+      const fill = frac > 0 ? arcPath(CX, CY, R, arcS, nEnd, fillColor) : "";
+
+      // Zone tick marks
+      const tick60 = polarToCart(CX, CY, R + 5, w60 - 90 + 90);
+      const tick80 = polarToCart(CX, CY, R + 5, w80 - 90 + 90);
+
+      // Needle
+      const needleDeg = needleAngle - 90 + 90; // already in SVG coord
+      const nTip  = polarToCart(CX, CY, R - 6, needleDeg);
+      const nBase = polarToCart(CX, CY, -4, needleDeg + 90);
+      const nBase2= polarToCart(CX, CY, -4, needleDeg - 90);
+
+      const needleColor = state === "alert" ? "#A63D2E" : state === "watch" ? "#C97A2E" : "#1E6E7A";
+
+      return `
+        <svg class="gauge-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">
+          ${track}
+          ${fill}
+          <line x1="${CX}" y1="${CY}" x2="${nTip.x}" y2="${nTip.y}"
+            stroke="${needleColor}" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="${CX}" cy="${CY}" r="4" fill="${needleColor}"/>
+          <text x="${CX}" y="${CY - 12}" text-anchor="middle"
+            class="gauge-center-text" font-size="12" font-family="'JetBrains Mono',monospace" fill="#16262B" font-weight="700">${centerLabel}</text>
+          <text x="${CX}" y="${CY - 2}" text-anchor="middle"
+            font-size="7" font-family="'JetBrains Mono',monospace" fill="#6E8489">${unit}</text>
+        </svg>
+      `;
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  SPARKLINE (Chart.js)
+    // ═══════════════════════════════════════════════════════
+    function getOrCreateChart(nodeId, canvasEl, state) {
       if (charts[nodeId]) return charts[nodeId];
+      const lineColor = state === "alert" ? "#A63D2E" : state === "watch" ? "#C97A2E" : "#1E6E7A";
       const ctx = canvasEl.getContext("2d");
       const chart = new Chart(ctx, {
         type: "line",
@@ -281,12 +1073,11 @@
           labels: [],
           datasets: [{
             data: [],
-            borderColor: "rgba(56, 189, 248, 0.8)",
-            backgroundColor: "rgba(56, 189, 248, 0.05)",
+            borderColor: lineColor,
+            backgroundColor: lineColor + "18",
             borderWidth: 1.5,
             pointRadius: 0,
-            pointHoverRadius: 3,
-            tension: 0.4,
+            tension: 0.35,
             fill: true,
           }]
         },
@@ -294,248 +1085,354 @@
           responsive: true,
           maintainAspectRatio: false,
           plugins: { legend: { display: false }, tooltip: { enabled: false } },
-          scales: {
-            x: { display: false },
-            y: { display: false, min: 0 }
-          },
-          animation: { duration: 0 }
+          scales: { x: { display: false }, y: { display: false, min: 0 } },
+          animation: { duration: 200 }
         }
       });
       charts[nodeId] = chart;
       return chart;
     }
 
-    function pushChartPoint(nodeId, wl) {
-      const chart = charts[nodeId];
-      if (!chart) return;
-      chart.data.labels.push("");
-      chart.data.datasets[0].data.push(wl);
-      if (chart.data.labels.length > 20) {
-        chart.data.labels.shift();
-        chart.data.datasets[0].data.shift();
+    function pushChartPoint(nodeId, wl, state) {
+      if (!charts[nodeId]) return;
+      const c = charts[nodeId];
+      const lineColor = state === "alert" ? "#A63D2E" : state === "watch" ? "#C97A2E" : "#1E6E7A";
+      c.data.datasets[0].borderColor = lineColor;
+      c.data.datasets[0].backgroundColor = lineColor + "18";
+      c.data.labels.push("");
+      c.data.datasets[0].data.push(wl);
+      if (c.data.labels.length > 25) {
+        c.data.labels.shift();
+        c.data.datasets[0].data.shift();
       }
-      chart.update();
+      c.update("none");
     }
 
-    // ─── Dynamic Card Renderer ───
+    // ═══════════════════════════════════════════════════════
+    //  NODE CARD RENDERER
+    // ═══════════════════════════════════════════════════════
     function renderNodeCard(nodeId) {
-      const nd = nodeData[nodeId];
+      const nd    = nodeData[nodeId] || {};
       const alert = nd.alert || "OFFLINE";
       const probs = nd.probs || { NORMAL: 0, WATCH: 0, ALERT: 0 };
+      const state = alert === "ALERT" ? "alert" : alert === "WATCH" ? "watch" : "normal";
 
-      let card = el("card-" + nodeId);
+      let card = $("card-" + nodeId);
       const isNew = !card;
+
+      const wl         = nd.water_level_m;
+      const wlGaugePct = Math.min(100, ((wl || 0) / 50) * 100);   // scale 0–50m → 0–100%
+      const wlLabel    = wl != null ? fmt(wl, 1) : "—";
+      const gaugeHTML  = buildGaugeSVG(wlGaugePct, state, wlLabel, "m");
+
+      const badgeClass = state === "alert" ? "badge-alert" : state === "watch" ? "badge-watch" : "badge-normal";
 
       if (isNew) {
         card = document.createElement("div");
         card.id = "card-" + nodeId;
-        card.className = "glass-panel rounded-2xl overflow-hidden transition-all duration-500 hover:-translate-y-1";
-        
+        card.className = `node-card state-${state}`;
+
         card.innerHTML = `
-          <div class="px-5 py-4 border-b border-slate-800/40 bg-slate-900/20 flex items-center justify-between">
-            <div>
-              <div class="text-sm font-semibold tracking-tight text-slate-100 flex items-center gap-2">
-                <span class="relative flex h-1.5 w-1.5">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75" id="cn-ping-${nodeId}"></span>
-                  <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-slate-500" id="cn-dot-${nodeId}"></span>
-                </span>
-                ${nd.node_label}
+          <div class="card-header state-${state}" id="ch-${nodeId}">
+            <div class="card-node-info">
+              <div class="card-node-name" id="cn-name-${nodeId}">
+                <span class="node-live-dot" id="cn-dot-${nodeId}"></span>
+                ${nd.node_label || nodeId}
               </div>
-              <div class="text-[9px] text-slate-500 font-mono mt-1 uppercase tracking-wider">${nodeId}</div>
+              <div class="card-node-id">${nodeId}</div>
             </div>
-            <div class="text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded" id="cn-badge-${nodeId}">OFFLINE</div>
+            <div class="alert-badge ${badgeClass}" id="cn-badge-${nodeId}">${alert}</div>
           </div>
-          
-          <div class="p-5 space-y-5">
-            <div class="grid grid-cols-2 gap-2" id="cn-sensors-${nodeId}"></div>
-            
-            <div class="space-y-2">
-              <div class="flex justify-between items-center text-[9px] font-semibold text-slate-500 uppercase tracking-widest">
-                <span>ML Probability</span>
-                <span id="cn-proba-${nodeId}" class="font-mono text-slate-400"></span>
+
+          <div class="card-body">
+            <div class="card-main-row">
+              <div class="gauge-wrap" id="cn-gauge-${nodeId}">${gaugeHTML}</div>
+              <div class="sensor-grid" id="cn-sensors-${nodeId}"></div>
+            </div>
+
+            <div class="prob-section">
+              <div class="prob-header">
+                <span class="prob-lbl">ML Risk Distribution</span>
+                <span class="prob-vals" id="cn-proba-${nodeId}">N — W — A</span>
               </div>
-              <div class="h-1.5 bg-slate-900/80 rounded-full flex overflow-hidden border border-slate-800/50 shadow-inner">
-                <div class="bg-emerald-500 prob-bar shadow-[0_0_8px_rgba(16,185,129,0.4)]" id="cn-bn-${nodeId}" style="width: 0%"></div>
-                <div class="bg-amber-500 prob-bar shadow-[0_0_8px_rgba(245,158,11,0.4)]" id="cn-bw-${nodeId}" style="width: 0%"></div>
-                <div class="bg-red-500 prob-bar shadow-[0_0_8px_rgba(239,68,68,0.6)]" id="cn-ba-${nodeId}" style="width: 0%"></div>
+              <div class="prob-bar-track">
+                <div class="pb-normal" id="cn-bn-${nodeId}" style="width:0%"></div>
+                <div class="pb-watch"  id="cn-bw-${nodeId}" style="width:0%"></div>
+                <div class="pb-alert"  id="cn-ba-${nodeId}" style="width:0%"></div>
               </div>
             </div>
 
-            <div class="h-12 w-full relative opacity-70 mix-blend-screen">
+            <div class="sparkline-label">Water Level Trend</div>
+            <div class="sparkline-wrap">
               <canvas id="cn-chart-${nodeId}"></canvas>
             </div>
           </div>
+
+          <div class="card-footer">
+            <span id="cn-ts-${nodeId}">—</span>
+            <span id="cn-flow-${nodeId}">—</span>
+          </div>
         `;
-        
-        const empty = el("emptyState");
-        if (empty) empty.remove();
-        el("nodeGrid").appendChild(card);
-        getOrCreateChart(nodeId, el("cn-chart-" + nodeId));
+
+        const emptyState = $("emptyState");
+        if (emptyState) emptyState.remove();
+        $("nodeGrid").appendChild(card);
+
+        // init chart after DOM insertion
+        const canvas = $("cn-chart-" + nodeId);
+        getOrCreateChart(nodeId, canvas, state);
       }
 
-      // Dynamic Styling based on alert state
-      const isAlert = alert === "ALERT", isWatch = alert === "WATCH";
-      
-      card.style.borderColor = isAlert ? "rgba(239,68,68,0.3)" : isWatch ? "rgba(245,158,11,0.3)" : "rgba(16,185,129,0.2)";
-      card.style.boxShadow = isAlert ? "0 8px 32px 0 rgba(239,68,68,0.15)" : isWatch ? "0 8px 32px 0 rgba(245,158,11,0.1)" : "0 8px 32px 0 rgba(0,0,0,0.3)";
+      // Update card state classes
+      card.className = `node-card state-${state}`;
+      const header = $("ch-" + nodeId);
+      if (header) header.className = `card-header state-${state}`;
 
-      const badge = el("cn-badge-" + nodeId);
-      badge.textContent = alert;
-      badge.className = `text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded ${
-        isAlert ? "bg-red-500/10 text-red-400" : isWatch ? "bg-amber-500/10 text-amber-400" : "bg-emerald-500/10 text-emerald-400"
-      }`;
+      // Update badge
+      const badge = $("cn-badge-" + nodeId);
+      if (badge) {
+        badge.textContent = alert;
+        badge.className = `alert-badge ${badgeClass}`;
+      }
 
-      el("cn-dot-" + nodeId).className = `relative inline-flex rounded-full h-1.5 w-1.5 ${isAlert ? "bg-red-500" : isWatch ? "bg-amber-500" : "bg-emerald-500"}`;
-      el("cn-ping-" + nodeId).className = `animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isAlert ? "bg-red-400" : isWatch ? "bg-amber-400" : "bg-emerald-400"}`;
+      // Update name (in case label changed via REST sync)
+      const nameEl = $("cn-name-" + nodeId);
+      if (nameEl) {
+        nameEl.innerHTML = `<span class="node-live-dot" id="cn-dot-${nodeId}"></span>${nd.node_label || nodeId}`;
+      }
 
-      // Update Sensors
-      const sGrid = el("cn-sensors-" + nodeId);
-      sGrid.innerHTML = `
-        <div class="bg-slate-900/30 p-2.5 rounded-lg border border-slate-800/40">
-          <div class="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Water Lvl</div>
-          <div class="text-sm font-medium ${nd.water_level_m >= 40 ? 'text-red-400' : 'text-slate-200'}">${fmt(nd.water_level_m, 2)}<span class="text-[10px] text-slate-500 ml-1">m</span></div>
-        </div>
-        <div class="bg-slate-900/30 p-2.5 rounded-lg border border-slate-800/40">
-          <div class="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Rain 24h</div>
-          <div class="text-sm font-medium ${nd.rainfall_24h_mm >= 100 ? 'text-amber-400' : 'text-slate-200'}">${fmt(nd.rainfall_24h_mm)}<span class="text-[10px] text-slate-500 ml-1">mm</span></div>
-        </div>
-        <div class="bg-slate-900/30 p-2.5 rounded-lg border border-slate-800/40">
-          <div class="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Soil</div>
-          <div class="text-sm font-medium text-slate-200">${fmt(nd.soil_moisture_pct)}<span class="text-[10px] text-slate-500 ml-1">%</span></div>
-        </div>
-        <div class="bg-slate-900/30 p-2.5 rounded-lg border border-slate-800/40">
-          <div class="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Flow</div>
-          <div class="text-sm font-medium text-slate-200">${fmt(nd.flow_velocity_ms, 2)}<span class="text-[10px] text-slate-500 ml-1">m/s</span></div>
-        </div>
-      `;
-      Array.from(sGrid.children).forEach(c => {
-        c.classList.remove("flash-update");
-        void c.offsetWidth;
-        c.classList.add("flash-update");
-      });
+      // Update gauge
+      const gaugeWrap = $("cn-gauge-" + nodeId);
+      if (gaugeWrap) gaugeWrap.innerHTML = buildGaugeSVG(wlGaugePct, state, wlLabel, "m");
 
-      // Update Progress Bars
-      const pn = (probs.NORMAL * 100).toFixed(0);
-      const pw = (probs.WATCH * 100).toFixed(0);
-      const pa = (probs.ALERT * 100).toFixed(0);
-      
-      el("cn-bn-" + nodeId).style.width = pn + "%";
-      el("cn-bw-" + nodeId).style.width = pw + "%";
-      el("cn-ba-" + nodeId).style.width = pa + "%";
-      el("cn-proba-" + nodeId).textContent = `${pn}% / ${pw}% / ${pa}%`;
+      // Sensor cells
+      const wlHigh  = (wl || 0) >= 40;
+      const rnHigh  = (nd.rainfall_24h_mm || 0) >= 100;
+      const rnMed   = (nd.rainfall_24h_mm || 0) >= 60;
+      const grid = $("cn-sensors-" + nodeId);
+      if (grid) {
+        grid.innerHTML = `
+          <div class="sensor-cell">
+            <div class="sensor-lbl">Rainfall 24h</div>
+            <div class="sensor-val ${rnHigh ? "high" : rnMed ? "med" : ""}">${fmt(nd.rainfall_24h_mm)}<span class="sensor-unit">mm</span></div>
+          </div>
+          <div class="sensor-cell">
+            <div class="sensor-lbl">Soil Moisture</div>
+            <div class="sensor-val">${fmt(nd.soil_moisture_pct)}<span class="sensor-unit">%</span></div>
+          </div>
+          <div class="sensor-cell">
+            <div class="sensor-lbl">Flow Velocity</div>
+            <div class="sensor-val">${fmt(nd.flow_velocity_ms, 2)}<span class="sensor-unit">m/s</span></div>
+          </div>
+          <div class="sensor-cell">
+            <div class="sensor-lbl">Turbidity</div>
+            <div class="sensor-val">${fmt(nd.turbidity_ntu, 0)}<span class="sensor-unit">NTU</span></div>
+          </div>
+        `;
+        // Flash individual cells
+        Array.from(grid.children).forEach(c => {
+          c.classList.remove("flash-update");
+          void c.offsetWidth;
+          c.classList.add("flash-update");
+        });
+      }
 
-      if (nd.water_level_m !== undefined) pushChartPoint(nodeId, nd.water_level_m);
+      // Probability bar
+      const pn = ((probs.NORMAL || 0) * 100).toFixed(0);
+      const pw = ((probs.WATCH  || 0) * 100).toFixed(0);
+      const pa = ((probs.ALERT  || 0) * 100).toFixed(0);
+      const bnEl = $("cn-bn-" + nodeId), bwEl = $("cn-bw-" + nodeId), baEl = $("cn-ba-" + nodeId);
+      if (bnEl) bnEl.style.width = pn + "%";
+      if (bwEl) bwEl.style.width = pw + "%";
+      if (baEl) baEl.style.width = pa + "%";
+      const probaEl = $("cn-proba-" + nodeId);
+      if (probaEl) probaEl.textContent = `${pn}% N · ${pw}% W · ${pa}% A`;
+
+      // Sparkline
+      if (wl !== undefined) pushChartPoint(nodeId, wl, state);
+
+      // Footer
+      const tsEl   = $("cn-ts-"   + nodeId);
+      const flowEl = $("cn-flow-" + nodeId);
+      if (tsEl)   tsEl.textContent   = nd.last_updated ? new Date(nd.last_updated).toLocaleTimeString() : "—";
+      if (flowEl) flowEl.textContent = nd.flow_velocity_ms != null ? `${fmt(nd.flow_velocity_ms, 2)} m/s` : "—";
     }
 
-    // ─── REST API Synchronizer ───
+    // ═══════════════════════════════════════════════════════
+    //  REST API SYNC with exponential backoff
+    // ═══════════════════════════════════════════════════════
+    let _syncRetryDelay = 5000;
+    let _syncTimer      = null;
+    let _apiOk          = false;
+
+    function setApiBanner(ok, msg) {
+      const banner = $("apiBanner");
+      if (ok) {
+        banner.classList.remove("visible");
+        _apiOk = true;
+      } else {
+        $("apiBannerText").textContent = msg || "⚠ REST API Disconnected — retrying…";
+        banner.classList.add("visible");
+        _apiOk = false;
+      }
+    }
+
     async function syncFromBackend() {
       if (!backendApiUrl) return;
-      const btn = el("syncBtn").firstElementChild;
-      btn.classList.add("animate-spin");
-      
+      const btn = $("syncBtn");
+      btn.classList.add("spinning");
+
       try {
         const res = await fetch(`${backendApiUrl}/api/nodes`);
-        if (!res.ok) throw new Error(res.status);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        
+        _syncRetryDelay = 5000;  // reset on success
+        setApiBanner(true);
+
         if (data.nodes) {
           data.nodes.forEach(node => {
             const id = node.node_id;
             if (!nodeData[id]) nodeData[id] = { node_id: id, node_label: id };
             Object.assign(nodeData[id], {
-              node_label: node.node_label || id,
-              water_level_m: node.water_level_m,
-              rainfall_24h_mm: node.rainfall_24h_mm,
+              node_label:        node.node_label || id,
+              water_level_m:     node.water_level_m,
+              rainfall_24h_mm:   node.rainfall_24h_mm,
               soil_moisture_pct: node.soil_moisture_pct,
-              flow_velocity_ms: node.flow_velocity_ms,
-              alert: node.alert_level || "NORMAL",
-              probs: node.probabilities || {},
+              flow_velocity_ms:  node.flow_velocity_ms,
+              turbidity_ntu:     node.turbidity_ntu,
+              alert:             node.alert_level || "NORMAL",
+              probs:             node.probabilities || {},
+              last_updated:      node.last_updated,
             });
             renderNodeCard(id);
+            logEvent(id, node.alert_level || "NORMAL", `REST sync – WL=${fmt(node.water_level_m, 2)}m Rain=${fmt(node.rainfall_24h_mm)}mm`);
           });
           updateSummary();
           updateAlertBanner();
         }
       } catch (err) {
-        logEvent("system", "WARN", `API Sync failed. Relying on WebSockets.`);
+        _syncRetryDelay = Math.min(_syncRetryDelay * 2, 60000);
+        setApiBanner(false, `⚠ REST API Disconnected — retrying in ${Math.round(_syncRetryDelay/1000)}s…`);
+        logEvent("system", "WARN", `API sync failed: ${err.message}. Retry in ${Math.round(_syncRetryDelay/1000)}s.`);
       } finally {
-        setTimeout(() => btn.classList.remove("animate-spin"), 500);
+        setTimeout(() => btn.classList.remove("spinning"), 400);
       }
     }
 
+    function apiSyncWithBackoff(delay) {
+      clearTimeout(_syncTimer);
+      _syncTimer = setTimeout(async () => {
+        await syncFromBackend();
+        apiSyncWithBackoff(_syncRetryDelay);
+      }, delay);
+    }
+
     // ═══════════════════════════════════════════════════════
-    //  MQTT Connection with Exponential Backoff
+    //  DEMO PANEL
+    // ═══════════════════════════════════════════════════════
+    $("demoSubmitBtn").addEventListener("click", async () => {
+      const payload = {
+        node_id:           $("d_node_id").value.trim() || "sim-node-1",
+        water_level_m:     parseFloat($("d_water").value),
+        rainfall_24h_mm:   parseFloat($("d_rain").value),
+        soil_moisture_pct: parseFloat($("d_soil").value),
+        flow_velocity_ms:  parseFloat($("d_flow").value),
+        turbidity_ntu:     parseFloat($("d_turb").value),
+      };
+      $("demoResult").textContent = "Sending…";
+      try {
+        const r = await fetch(`${backendApiUrl}/api/simulate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const d = await r.json();
+        if (r.ok) {
+          $("demoResult").textContent = `✓ ${d.alert_level} — N:${(d.probabilities?.NORMAL*100).toFixed(0)}% W:${(d.probabilities?.WATCH*100).toFixed(0)}% A:${(d.probabilities?.ALERT*100).toFixed(0)}%`;
+          // Reflect in UI immediately
+          const id = payload.node_id;
+          if (!nodeData[id]) nodeData[id] = { node_id: id, node_label: id };
+          Object.assign(nodeData[id], { ...payload, alert: d.alert_level, probs: d.probabilities || {}, last_updated: new Date().toISOString() });
+          renderNodeCard(id);
+          updateSummary();
+          updateAlertBanner();
+          logEvent(id, d.alert_level, `Simulated – ${d.alert_level}`);
+        } else {
+          $("demoResult").textContent = `✗ Error: ${d.error}`;
+        }
+      } catch (e) {
+        $("demoResult").textContent = `✗ Network error: ${e.message}`;
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════
+    //  MQTT Connection
     // ═══════════════════════════════════════════════════════
     function setMqttStatus(state, text) {
-      const wrap = el("mqttStatus");
-      const dot = el("mqttDot");
-      el("mqttLabel").textContent = text;
-      
-      if (state === "connected") {
-        wrap.className = "flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-[10px] text-emerald-400 rounded-full transition-colors";
-        dot.className = "h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]";
-      } else if (state === "error") {
-        wrap.className = "flex items-center gap-2 bg-red-500/10 border border-red-500/20 px-3 py-1 text-[10px] text-red-400 rounded-full transition-colors";
-        dot.className = "h-1.5 w-1.5 rounded-full bg-red-500";
-      } else {
-        wrap.className = "flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 px-3 py-1 text-[10px] text-amber-400 rounded-full transition-colors";
-        dot.className = "h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse";
-      }
+      const pill = $("mqttStatus");
+      pill.className = `status-pill ${state}`;
+      $("mqttLabel").textContent = text;
     }
 
-    let reconnectDelay = 1000;
-    const MAX_DELAY = 30000;
-
-    let mqttClient = mqtt.connect(BROKER_WSS, {
+    const mqttClient = mqtt.connect(BROKER_WSS, {
       clientId: CLIENT_ID,
       clean: true,
-      reconnectPeriod: reconnectDelay,
-      connectTimeout: 10000,
+      reconnectPeriod: 3000,
+      connectTimeout: 15000,
     });
 
     mqttClient.on("connect", () => {
-      reconnectDelay = 1000;
-      mqttClient.options.reconnectPeriod = reconnectDelay;
-      setMqttStatus("connected", "Connected");
+      setMqttStatus("connected", "Live");
       mqttClient.subscribe([TOPIC_SENSOR_ALL, TOPIC_ALERT_ALL]);
-      syncFromBackend();
+      logEvent("system", "INFO", `MQTT connected → ${BROKER_WSS}`);
+      apiSyncWithBackoff(0);   // immediate sync on connect
     });
 
     mqttClient.on("reconnect", () => {
-      setMqttStatus("connecting", `Reconnecting (${reconnectDelay/1000}s)...`);
-      reconnectDelay = Math.min(reconnectDelay * 1.5, MAX_DELAY);
-      mqttClient.options.reconnectPeriod = reconnectDelay;
+      setMqttStatus("connecting", "Reconnecting…");
     });
 
-    mqttClient.on("error", (err) => {
+    mqttClient.on("offline", () => {
+      setMqttStatus("connecting", "Offline");
+    });
+
+    mqttClient.on("error", err => {
       setMqttStatus("error", "Error");
-      logEvent("system", "ALERT", `MQTT Error: ${err.message}`);
+      logEvent("system", "WARN", `MQTT error: ${err.message}`);
     });
 
     mqttClient.on("message", (topic, payload) => {
       msgCount++;
       try {
-        const data = JSON.parse(payload.toString());
+        const data  = JSON.parse(payload.toString());
         const parts = topic.split("/");
-        const id = parts[2] || data.node_id;
-        
+        const id    = parts[2] || data.node_id;
+
         if (!nodeData[id]) nodeData[id] = { node_id: id, node_label: id, alert: "NORMAL", probs: {} };
-        
+
         if (parts[1] === "sensor") {
           Object.assign(nodeData[id], data);
         } else if (parts[1] === "alert") {
           nodeData[id].alert = data.alert_level || "NORMAL";
           nodeData[id].probs = data.probabilities || {};
+          nodeData[id].last_updated = new Date().toISOString();
         }
-        
+
         renderNodeCard(id);
         updateSummary();
         updateAlertBanner();
+
+        if (parts[1] === "alert") {
+          logEvent(id, data.alert_level || "NORMAL",
+            `MQTT alert → ${data.alert_level} P(A)=${((data.probabilities?.ALERT||0)*100).toFixed(0)}%`);
+        }
       } catch (e) {
-        logEvent("system", "WARN", "Invalid payload");
+        logEvent("system", "WARN", "Invalid MQTT payload — parse error");
       }
     });
 
+    // Start API polling loop even before MQTT connects
+    apiSyncWithBackoff(1500);
   </script>
 </body>
 </html>
