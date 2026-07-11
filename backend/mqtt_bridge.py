@@ -4,25 +4,27 @@ FloodSense MQTT Bridge – Multi-Node Edition (Production)
 • Subscribes to  flood/sensor/+   (ALL nodes via MQTT wildcard)
 • Runs ML prediction for every incoming reading
 • Publishes result to  flood/alert/<node_id>
-• Sends WhatsApp via Twilio (per-node cooldown)
+• Sends WhatsApp via Twilio (per-node cooldown, full error codes logged)
 • Exposes HTTP REST API on $PORT (default 8080) for the dashboard
 • CORS-enabled for separate frontend deployments (Vercel / GitHub Pages)
 
 Environment Variables (see .env.example):
   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM, TWILIO_TO  [optional]
-  MQTT_BROKER  (default: broker.hivemq.com)
-  MQTT_PORT    (default: 1883)
-  PORT         (default: 8080)
+  TEST_SECRET    — shared secret for POST /api/test-alert  [optional]
+  DEMO_MODE      — set to "true" to enable POST /api/simulate
+  MQTT_BROKER    (default: broker.hivemq.com)
+  MQTT_PORT      (default: 8883 — TLS)
+  PORT           (default: 8080)
 
 Usage (local):
   cp backend/.env.example backend/.env
   pip install -r requirements.txt
   python backend/mqtt_bridge.py
 
-Usage (production / Gunicorn):
-  gunicorn --chdir backend mqtt_bridge:app --bind 0.0.0.0:$PORT
+Usage (production / Gunicorn — MUST use --workers 1):
+  gunicorn --chdir backend mqtt_bridge:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
   MQTT loop is started inside create_app() via a threading.Event guard
-  so it runs exactly once even across Gunicorn worker forks.
+  so it runs exactly once even if Gunicorn ever forks.
 """
 
 import json
@@ -31,13 +33,16 @@ import os
 import sys
 import threading
 import time
+import uuid
+from collections import deque
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import paho.mqtt.client as mqtt
 from twilio.rest import Client
+from twilio.base.exceptions import TwilioRestException
 
 # ── Resolve paths & load .env ─────────────────────────────────────
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -55,20 +60,20 @@ logging.basicConfig(
 log = logging.getLogger("floodsense")
 
 # ── Startup env-var validation ────────────────────────────────────
-_REQUIRED_MQTT = {"MQTT_BROKER": "broker.hivemq.com", "MQTT_PORT": "1883"}
-
-for var, default in _REQUIRED_MQTT.items():
-    if not os.getenv(var):
-        log.warning("Env var %s not set – using default: %s", var, default)
-
 BROKER   = os.getenv("MQTT_BROKER", "broker.hivemq.com")
-PORT     = int(os.getenv("MQTT_PORT", 1883))
+PORT     = int(os.getenv("MQTT_PORT", 8883))   # 8883 = TLS; use 1883 for non-TLS local
 API_PORT = int(os.getenv("PORT", 8080))
+
+# Demo mode — POST /api/simulate only available when DEMO_MODE=true
+DEMO_MODE = os.getenv("DEMO_MODE", "").lower() in ("true", "1", "yes")
+
+# Test alert endpoint secret (header X-Test-Key must match)
+TEST_SECRET = os.getenv("TEST_SECRET", "")
 
 TOPIC_IN      = "flood/sensor/+"
 TOPIC_OUT_FMT = "flood/alert/{node_id}"
 
-# Twilio (all optional – alerts silently skipped when absent)
+# ── Twilio (all optional — alerts silently skipped when absent) ───
 TWILIO_SID  = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_FROM = os.getenv("TWILIO_FROM")
@@ -84,9 +89,6 @@ if not _TWILIO_READY:
 ALERT_COOLDOWN_SEC = 300
 
 # ── Thread-safe state store ───────────────────────────────────────
-# Both the MQTT network thread (on_message) and Gunicorn request threads
-# (Flask route handlers) read/write these dicts.  A single RLock serialises
-# all mutations; reads in route handlers snapshot under the same lock.
 _state_lock: threading.RLock = threading.RLock()
 
 node_states:      dict = {}   # node_id -> latest merged state dict
@@ -94,12 +96,48 @@ node_alert_times: dict = {}   # node_id -> unix timestamp of last WhatsApp send
 node_history:     dict = {}   # node_id -> list of last MAX_HISTORY points
 MAX_HISTORY = 20
 
+# Alert attempt log (last 50, used by GET /api/alerts/log)
+_alert_log: deque = deque(maxlen=50)
+
+# MQTT connected flag (updated in on_connect / on_disconnect)
+_mqtt_connected = False
+
 # Guard so init_mqtt() fires exactly once across Gunicorn workers
 _mqtt_started = threading.Event()
 
+# Unique client_id per process restart — prevents HiveMQ disconnect loop
+# when two workers share the same static client_id.
+_MQTT_CLIENT_ID = f"flood-bridge-{uuid.uuid4().hex[:8]}"
+
 # ── Flask app factory ─────────────────────────────────────────────
 app = Flask(__name__)
+# CORS: keep wildcard for now — lock down to your frontend origin before going public
+# e.g. origins=["https://your-frontend.vercel.app"]
 CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+
+# ── Validation helpers ────────────────────────────────────────────
+
+_SENSOR_FIELDS = [
+    "water_level_m", "rainfall_24h_mm", "soil_moisture_pct",
+    "flow_velocity_ms", "turbidity_ntu",
+]
+
+def _validate_sensor_payload(data: dict) -> tuple[dict, str | None]:
+    """
+    Validate that all sensor fields are present and numeric.
+    Returns (cleaned_floats, None) on success or (_, error_msg) on failure.
+    """
+    clean = {}
+    for field in _SENSOR_FIELDS:
+        raw = data.get(field)
+        if raw is None:
+            return {}, f"Missing required field: {field}"
+        try:
+            clean[field] = float(raw)
+        except (TypeError, ValueError):
+            return {}, f"Field '{field}' must be numeric, got: {repr(raw)}"
+    return clean, None
 
 
 # ── REST API ──────────────────────────────────────────────────────
@@ -140,28 +178,173 @@ def api_health():
     with _state_lock:
         count = len(node_states)
     return jsonify({
-        "status":       "ok",
-        "nodes_online": count,
-        "broker":       BROKER,
-        "twilio_ready": _TWILIO_READY,
-        "uptime_ts":    datetime.now(timezone.utc).isoformat(),
+        "status":         "ok",
+        "nodes_online":   count,
+        "broker":         BROKER,
+        "mqtt_port":      PORT,
+        "mqtt_connected": _mqtt_connected,
+        "twilio_ready":   _TWILIO_READY,
+        "demo_mode":      DEMO_MODE,
+        "uptime_ts":      datetime.now(timezone.utc).isoformat(),
     })
+
+
+@app.route("/api/version", methods=["GET"])
+def api_version():
+    return jsonify({"version": "2.0.0", "build": "phases-1-to-5"})
+
+
+@app.route("/api/alerts/log", methods=["GET"])
+def api_alerts_log():
+    """Last 50 WhatsApp send attempts with outcome and Twilio error codes."""
+    with _state_lock:
+        log_snapshot = list(_alert_log)
+    return jsonify({"attempts": log_snapshot, "count": len(log_snapshot)})
+
+
+@app.route("/api/simulate", methods=["POST"])
+def api_simulate():
+    """
+    Inject a synthetic sensor reading through the full ML pipeline.
+    Only available when DEMO_MODE=true (set env var DEMO_MODE=true).
+    """
+    if not DEMO_MODE:
+        return jsonify({"error": "Simulation endpoint is disabled. Set DEMO_MODE=true to enable."}), 403
+
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({"error": "Request body must be JSON"}), 400
+
+    node_id = str(body.get("node_id", "sim-node")).strip()
+    if not node_id:
+        return jsonify({"error": "node_id must not be empty"}), 422
+
+    floats, err = _validate_sensor_payload(body)
+    if err:
+        return jsonify({"error": err}), 422
+
+    # Run ML prediction
+    try:
+        result = predict_flood(node_id=node_id, **floats)
+    except Exception as exc:
+        log.error("[ML][simulate] predict_flood failed: %s", exc)
+        return jsonify({"error": f"ML prediction failed: {exc}"}), 500
+
+    alert = result["alert_level"]
+    probs = result["probabilities"]
+    ts    = datetime.now(timezone.utc).isoformat()
+
+    data = {**floats, "node_id": node_id, "node_label": node_id.replace("-", " ").title()}
+    state = {**data, "alert_level": alert, "probabilities": probs, "last_updated": ts}
+
+    # Update shared state (same path as live MQTT readings)
+    with _state_lock:
+        node_states[node_id] = state
+        bucket = node_history.setdefault(node_id, [])
+        bucket.append({
+            "ts":               ts,
+            "water_level_m":    floats.get("water_level_m"),
+            "rainfall_24h_mm":  floats.get("rainfall_24h_mm"),
+            "flow_velocity_ms": floats.get("flow_velocity_ms"),
+            "alert_level":      alert,
+        })
+        if len(bucket) > MAX_HISTORY:
+            bucket.pop(0)
+
+    log.info("[simulate][%s] %s P=%s", node_id, alert, probs)
+
+    # Fire WhatsApp if alert (bypass cooldown for simulation — force=True)
+    if alert == "ALERT":
+        threading.Thread(
+            target=send_whatsapp,
+            args=(node_id, alert, data),
+            kwargs={"force": True},
+            daemon=True,
+        ).start()
+
+    return jsonify({
+        "node_id":      node_id,
+        "alert_level":  alert,
+        "probabilities": probs,
+        "timestamp":    ts,
+    })
+
+
+@app.route("/api/test-alert", methods=["POST"])
+def api_test_alert():
+    """
+    Fire a real WhatsApp message directly (bypasses ML and MQTT).
+    Requires header:  X-Test-Key: <TEST_SECRET env var>
+    Used to isolate Twilio config from hardware/ML issues.
+    """
+    if not TEST_SECRET:
+        return jsonify({"error": "TEST_SECRET not configured on server."}), 503
+
+    key = request.headers.get("X-Test-Key", "")
+    if key != TEST_SECRET:
+        return jsonify({"error": "Invalid or missing X-Test-Key header"}), 401
+
+    if not _TWILIO_READY:
+        return jsonify({"error": "Twilio credentials not configured on server."}), 503
+
+    body = request.get_json(silent=True) or {}
+    node_id = str(body.get("node_id", "test-node")).strip() or "test-node"
+
+    fake_data = {
+        "node_label":        "TEST NODE",
+        "water_level_m":     35.0,
+        "rainfall_24h_mm":   32.0,
+        "soil_moisture_pct": 91.0,
+        "flow_velocity_ms":  3.5,
+        "turbidity_ntu":     720.0,
+    }
+
+    result = send_whatsapp(node_id, "ALERT", fake_data, force=True, return_result=True)
+    if result.get("success"):
+        return jsonify({"sent": True, "sid": result.get("sid")})
+    else:
+        return jsonify({
+            "sent":         False,
+            "error":        result.get("error"),
+            "twilio_code":  result.get("twilio_code"),
+            "twilio_msg":   result.get("twilio_msg"),
+        }), 500
 
 
 # ── WhatsApp alert ────────────────────────────────────────────────
 
-def send_whatsapp(node_id: str, alert: str, data: dict) -> None:
-    if not _TWILIO_READY:
-        return
+def send_whatsapp(
+    node_id: str,
+    alert: str,
+    data: dict,
+    *,
+    force: bool = False,
+    return_result: bool = False,
+) -> dict:
+    """
+    Send a WhatsApp alert via Twilio.
 
-    now  = time.monotonic()
-    with _state_lock:
-        last = node_alert_times.get(node_id, 0.0)
-        if now - last < ALERT_COOLDOWN_SEC:
-            remaining = int(ALERT_COOLDOWN_SEC - (now - last))
-            log.warning("[WhatsApp][%s] Cooldown – %ds left", node_id, remaining)
-            return
-        node_alert_times[node_id] = now   # reserve slot inside lock
+    Args:
+        force:         If True, bypass the per-node cooldown timer.
+        return_result: If True, return a dict with {success, sid, error, twilio_code, twilio_msg}
+                       instead of None — used by /api/test-alert.
+    """
+    if not _TWILIO_READY:
+        return {"success": False, "error": "Twilio not ready"}
+
+    now = time.monotonic()
+
+    if not force:
+        with _state_lock:
+            last = node_alert_times.get(node_id, 0.0)
+            if now - last < ALERT_COOLDOWN_SEC:
+                remaining = int(ALERT_COOLDOWN_SEC - (now - last))
+                log.warning("[WhatsApp][%s] Cooldown – %ds left", node_id, remaining)
+                return {"success": False, "error": "cooldown"}
+            node_alert_times[node_id] = now   # reserve slot inside lock
+    else:
+        with _state_lock:
+            node_alert_times[node_id] = now
 
     label = data.get("node_label", node_id)
     body  = (
@@ -175,29 +358,60 @@ def send_whatsapp(node_id: str, alert: str, data: dict) -> None:
         f"Turbidity : {data.get('turbidity_ntu', 'N/A')} NTU\n"
         f"Time      : {time.strftime('%Y-%m-%d %H:%M:%S')}"
     )
+
+    attempt = {
+        "ts":      datetime.now(timezone.utc).isoformat(),
+        "node_id": node_id,
+        "alert":   alert,
+    }
+
     try:
         client = Client(TWILIO_SID, TWILIO_AUTH)
         msg    = client.messages.create(from_=TWILIO_FROM, to=TWILIO_TO, body=body)
         log.info("[WhatsApp][%s] Sent – SID: %s", node_id, msg.sid)
-    except Exception as exc:
-        log.error("[WhatsApp][%s] Failed: %s", node_id, exc)
-        # Roll back reservation so next attempt is not blocked by a failed send
+        attempt.update({"success": True, "sid": msg.sid})
+        _alert_log.append(attempt)
+        return {"success": True, "sid": msg.sid}
+
+    except TwilioRestException as exc:
+        # Log the actual Twilio error code and message — not just the str(exc)
+        log.error(
+            "[WhatsApp][%s] Twilio error code=%s msg=%s status=%s",
+            node_id, exc.code, exc.msg, exc.status,
+        )
+        attempt.update({"success": False, "twilio_code": exc.code, "twilio_msg": exc.msg, "error": str(exc)})
+        _alert_log.append(attempt)
+        # Roll back reservation so the next attempt is not blocked
         with _state_lock:
             node_alert_times.pop(node_id, None)
+        return {"success": False, "error": str(exc), "twilio_code": exc.code, "twilio_msg": exc.msg}
+
+    except Exception as exc:
+        log.error("[WhatsApp][%s] Unexpected error: %s", node_id, exc)
+        attempt.update({"success": False, "error": str(exc)})
+        _alert_log.append(attempt)
+        with _state_lock:
+            node_alert_times.pop(node_id, None)
+        return {"success": False, "error": str(exc)}
 
 
 # ── MQTT callbacks ────────────────────────────────────────────────
 
 def on_connect(client, userdata, flags, rc, props=None):
+    global _mqtt_connected
     if rc == 0:
-        log.info("[MQTT] Connected to %s:%d", BROKER, PORT)
+        _mqtt_connected = True
+        log.info("[MQTT] Connected to %s:%d (client_id=%s)", BROKER, PORT, _MQTT_CLIENT_ID)
         client.subscribe(TOPIC_IN)
         log.info("[MQTT] Subscribed wildcard -> %s", TOPIC_IN)
     else:
+        _mqtt_connected = False
         log.error("[MQTT] Connection refused – rc=%d", rc)
 
 
 def on_disconnect(client, userdata, rc, props=None):
+    global _mqtt_connected
+    _mqtt_connected = False
     if rc != 0:
         log.warning("[MQTT] Unexpected disconnect rc=%d – paho will reconnect.", rc)
 
@@ -283,7 +497,12 @@ def on_message(client, userdata, msg):
 # ── MQTT initialiser (idempotent) ─────────────────────────────────
 
 def init_mqtt() -> None:
-    """Start the paho background loop exactly once (safe across Gunicorn forks)."""
+    """
+    Start the paho background loop exactly once.
+    - Unique client_id per process prevents HiveMQ disconnect loops
+      when Gunicorn restarts without a full port release.
+    - TLS (port 8883) matches the frontend's WSS (8884) path.
+    """
     if _mqtt_started.is_set():
         return
     _mqtt_started.set()
@@ -291,16 +510,22 @@ def init_mqtt() -> None:
     try:
         mc = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
-            client_id="flood-bridge-multinode",
+            client_id=_MQTT_CLIENT_ID,
             clean_session=True,
         )
         mc.on_connect    = on_connect
         mc.on_disconnect = on_disconnect
         mc.on_message    = on_message
         mc.reconnect_delay_set(min_delay=2, max_delay=120)
+
+        # Enable TLS for port 8883
+        if PORT == 8883:
+            mc.tls_set()  # uses system CA store — no custom cert needed for HiveMQ public broker
+            log.info("[MQTT] TLS enabled for port 8883")
+
         mc.connect(BROKER, PORT, keepalive=60)
         mc.loop_start()
-        log.info("[MQTT] Background loop started.")
+        log.info("[MQTT] Background loop started. client_id=%s broker=%s:%d", _MQTT_CLIENT_ID, BROKER, PORT)
     except Exception as exc:
         log.error("[MQTT] Initialization failed: %s", exc)
         _mqtt_started.clear()   # allow retry on next request if boot-time broker is down
@@ -317,14 +542,12 @@ def main() -> None:
     log.info("  Broker  : %s:%d", BROKER, PORT)
     log.info("  Topic   : %s", TOPIC_IN)
     log.info("  API     : http://0.0.0.0:%d/api/nodes", API_PORT)
+    log.info("  Demo    : %s", DEMO_MODE)
+    log.info("  client_id: %s", _MQTT_CLIENT_ID)
     try:
         app.run(host="0.0.0.0", port=API_PORT, debug=False, use_reloader=False)
     except KeyboardInterrupt:
         log.info("Shutting down...")
-    finally:
-        if _mqtt_started.is_set():
-            # mc is local to init_mqtt; retrieve from paho's internal handle
-            pass  # paho loop_stop() is called by the daemon thread on process exit
 
 
 if __name__ == "__main__":
