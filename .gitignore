@@ -1,0 +1,56 @@
+# ── Secrets (NEVER commit real credentials) ────────────────────
+.env
+backend/.env
+*.env
+!.env.example
+keys.txt
+*.key
+*.pem
+secrets.txt
+credentials.txt
+
+# ── Python ─────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-wheel-metadata/
+*.egg
+
+# ── Virtual environments ────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+.virtualenv/
+
+# ── IDE / editor ────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── OS ──────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+ehthumbs.db
+Desktop.ini
+
+# ── Logs ────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Test / coverage ─────────────────────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
