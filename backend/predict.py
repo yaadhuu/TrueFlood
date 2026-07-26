@@ -1,54 +1,107 @@
 """
-FloodSense Prediction Module
-=============================
-Loads the trained Random Forest model and exposes predict_flood().
-Thread-safe: _rain_history is guarded by a per-module RLock so concurrent
-MQTT callbacks across multiple nodes never corrupt rolling rainfall state.
-
-Model search order:
-  1. Same directory as this file  (backend/)
-  2. ../ml_pipeline/              (monorepo dev layout)
+Deployment Version: FloodSense Live Inference Engine
+Computes rolling time-series features in-memory for live MQTT packets.
 """
 
 import os
-import threading
-from collections import deque
-
 import joblib
 import pandas as pd
+import numpy as np
+from collections import deque
 
-# ── Model discovery ───────────────────────────────────────────────
-_SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
-_MODEL_PATHS = [
-    os.path.join(_SCRIPT_DIR, "flood_model.joblib"),
-    os.path.join(_SCRIPT_DIR, "..", "ml_pipeline", "flood_model.joblib"),
-]
+# Resolve the path to where the trainer saved the model
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "ml_pipeline", "flood_model.joblib")
+LABEL_NAMES = ["NORMAL", "WATCH", "ALERT"]
 
-_saved: dict | None = None
-for _p in _MODEL_PATHS:
-    if os.path.exists(_p):
-        _saved = joblib.load(_p)
-        print(f"[predict] Model loaded from: {_p}")
-        break
+# In-memory streaming buffer (keeps the last 20 readings per ESP32 node)
+NODE_BUFFERS = {}
 
-if _saved is None:
-    raise FileNotFoundError(
-        "flood_model.joblib not found. "
-        "Run ml_pipeline/flood_ml_training2.py first."
-    )
+class FloodPredictor:
+    def __init__(self, model_path=MODEL_PATH):
+        self.model = None
+        self.feature_cols = []
+        try:
+            artifact = joblib.load(model_path)
+            self.model = artifact["model"]
+            self.feature_cols = artifact["features"]
+            print(f"[SUCCESS] ML Model loaded successfully with {len(self.feature_cols)} features.")
+        except Exception as e:
+            print(f"[WARNING] Warning: Could not load ML model. {e}")
 
-_model        = _saved["model"]
-_FEATURE_COLS = _saved["features"]
-_ALERT_LABELS = {0: "NORMAL", 1: "WATCH", 2: "ALERT"}
+    def predict(self, node_id, current_data):
+        if self.model is None:
+            # Safe fallback if the model file is missing on the server
+            return {
+                "status": "NORMAL",
+                "confidence": 1.0,
+                "probabilities": {"NORMAL": 1.0, "WATCH": 0.0, "ALERT": 0.0}
+            }
 
-# ── Stateful history (thread-safe) ──────────────────────────────
-_state_lock: threading.Lock = threading.Lock()
-_rain_history: dict[str, deque] = {}
-_prev_reading: dict[str, dict] = {}
+        # Initialize buffer for a new node
+        if node_id not in NODE_BUFFERS:
+            NODE_BUFFERS[node_id] = deque(maxlen=20)
+            
+        buffer = NODE_BUFFERS[node_id]
+        
+        # Parse incoming live data
+        w_curr = float(current_data.get("water_level_m", 0.0))
+        r_curr = float(current_data.get("rainfall_24h_mm", 0.0))
+        s_curr = float(current_data.get("soil_moisture_pct", 0.0))
+        v_curr = float(current_data.get("flow_velocity_ms", 0.0))
+        t_curr = float(current_data.get("turbidity_ntu", 0.0))
 
+        discharge_curr = w_curr * v_curr
 
-# ── Public API ────────────────────────────────────────────────────
+        # Fetch Lag 1 (previous) data from the buffer, or use current if it's the very first packet
+        if len(buffer) > 0:
+            prev = buffer[-1]
+            w_lag1, r_lag1, discharge_lag1, t_lag1 = prev["w"], prev["r"], prev["d"], prev["t"]
+        else:
+            w_lag1, r_lag1, discharge_lag1, t_lag1 = w_curr, r_curr, discharge_curr, t_curr
 
+        # Compute Trend Features
+        recent_rain = [p["r"] for p in buffer] + [r_curr]
+        rainfall_72h = float(np.sum(recent_rain[-3:]))
+        
+        water_level_change = w_curr - w_lag1
+        turbidity_spike = t_curr - t_lag1
+        soil_saturated = 1 if s_curr > 85.0 else 0
+
+        # Save this packet to the buffer for the NEXT prediction
+        buffer.append({"w": w_curr, "r": r_curr, "d": discharge_curr, "t": t_curr})
+
+        # Build the exact feature array the model expects
+        features_dict = {
+            "water_level_m": w_curr, "rainfall_24h_mm": r_curr, "soil_moisture_pct": s_curr,
+            "flow_velocity_ms": v_curr, "turbidity_ntu": t_curr, "discharge_m3s": discharge_curr,
+            "rainfall_72h_mm": rainfall_72h, "water_level_change": water_level_change,
+            "turbidity_spike": turbidity_spike, "soil_saturated": soil_saturated,
+            "water_level_lag1": w_lag1, "rainfall_lag1": r_lag1, "discharge_lag1": discharge_lag1
+        }
+
+        # Run inference
+        X_live = pd.DataFrame([features_dict])[self.feature_cols]
+        probs = self.model.predict_proba(X_live)[0]
+        pred_idx = int(np.argmax(probs))
+        
+        # Build probabilities dict for backward compatibility
+        prob_dict = {}
+        for i, cls in enumerate(self.model.classes_):
+            prob_dict[LABEL_NAMES[int(cls)]] = round(float(probs[i]), 4)
+        for name in LABEL_NAMES:
+            if name not in prob_dict:
+                prob_dict[name] = 0.0
+
+        return {
+            "status": LABEL_NAMES[pred_idx],
+            "confidence": round(float(probs[pred_idx]), 3),
+            "probabilities": prob_dict
+        }
+
+# Global instance to be imported by the MQTT bridge
+predictor = FloodPredictor()
+
+# Backward compatibility wrapper for mqtt_bridge.py
 def predict_flood(
     water_level_m: float,
     rainfall_24h_mm: float,
@@ -57,83 +110,16 @@ def predict_flood(
     turbidity_ntu: float,
     node_id: str = "default",
 ) -> dict:
-    """
-    Run ML inference for a single sensor reading.
-    """
-    discharge = water_level_m * flow_velocity_ms
-    soil_saturated = int(soil_moisture_pct > 85)
-
-    with _state_lock:
-        if node_id not in _rain_history:
-            _rain_history[node_id] = deque(maxlen=3)
-        _rain_history[node_id].append(rainfall_24h_mm)
-        rainfall_72h = sum(_rain_history[node_id])
-
-        prev = _prev_reading.get(node_id, {})
-        
-        water_level_lag1 = prev.get("water_level_m", water_level_m)
-        rainfall_lag1 = prev.get("rainfall_24h_mm", rainfall_24h_mm)
-        discharge_lag1 = prev.get("discharge", discharge)
-        turbidity_lag1 = prev.get("turbidity_ntu", turbidity_ntu)
-
-        water_level_change = water_level_m - water_level_lag1
-        turbidity_spike = turbidity_ntu - turbidity_lag1
-
-        # Save current for next time
-        _prev_reading[node_id] = {
-            "water_level_m": water_level_m,
-            "rainfall_24h_mm": rainfall_24h_mm,
-            "discharge": discharge,
-            "turbidity_ntu": turbidity_ntu
-        }
-
-    row = pd.DataFrame([[
-        water_level_m, rainfall_24h_mm, soil_moisture_pct,
-        flow_velocity_ms, turbidity_ntu, discharge,
-        rainfall_72h,
-        water_level_change,
-        turbidity_spike,
-        soil_saturated,
-        water_level_lag1,
-        rainfall_lag1,
-        discharge_lag1,
-    ]], columns=_FEATURE_COLS)
-
-
-    class_id = int(_model.predict(row)[0])
-    raw_probs = _model.predict_proba(row)[0]
-
-    prob_dict = {0: 0.0, 1: 0.0, 2: 0.0}
-    for i, cls in enumerate(_model.classes_):
-        prob_dict[int(cls)] = float(raw_probs[i])
-
-    return {
-        "alert_level": _ALERT_LABELS[class_id],
-        "class_id":    class_id,
-        "probabilities": {
-            "NORMAL": round(prob_dict[0], 4),
-            "WATCH":  round(prob_dict[1], 4),
-            "ALERT":  round(prob_dict[2], 4),
-        },
+    current_data = {
+        "water_level_m": water_level_m,
+        "rainfall_24h_mm": rainfall_24h_mm,
+        "soil_moisture_pct": soil_moisture_pct,
+        "flow_velocity_ms": flow_velocity_ms,
+        "turbidity_ntu": turbidity_ntu,
     }
-
-
-# ── Demo ──────────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    _cases = [
-        dict(water_level_m=0.8,  rainfall_24h_mm=1.5,  soil_moisture_pct=42.0,
-             flow_velocity_ms=0.6, turbidity_ntu=110),
-        dict(water_level_m=6.5,  rainfall_24h_mm=14.0, soil_moisture_pct=74.0,
-             flow_velocity_ms=1.8, turbidity_ntu=390),
-        dict(water_level_m=35.0, rainfall_24h_mm=32.0, soil_moisture_pct=91.0,
-             flow_velocity_ms=3.5, turbidity_ntu=720),
-    ]
-    for tc in _cases:
-        r = predict_flood(**tc)
-        print(
-            f"WL={tc['water_level_m']:5.1f}m  "
-            f"Rain={tc['rainfall_24h_mm']:5.1f}mm  "
-            f"Soil={tc['soil_moisture_pct']}%  "
-            f"-> {r['alert_level']:6s}  P={r['probabilities']}"
-        )
+    res = predictor.predict(node_id, current_data)
+    return {
+        "alert_level": res["status"],
+        "class_id": LABEL_NAMES.index(res["status"]),
+        "probabilities": res["probabilities"]
+    }
