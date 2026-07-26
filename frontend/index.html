@@ -3,1436 +3,945 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FloodSense – Multi-Node Hydro-Telemetry</title>
-  <meta name="description" content="Real-time multi-node flood early-warning dashboard. Live water level, rainfall, soil moisture, and ML-based flood risk classification across all sensor stations.">
+  <title>FloodSense Command Center</title>
+  <meta name="description" content="Professional Multi-Node Flood Early-Warning Telemetry Dashboard.">
 
-  <!-- Google Fonts: Archivo (headings) + JetBrains Mono (data) -->
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 
-  <!-- MQTT.js over WebSocket -->
+  <!-- Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.0.5/mqtt.min.js"></script>
-  <!-- Chart.js for sparklines -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 
   <style>
-    /* ═══════════════════════════════════════════════════
-       DESIGN TOKENS  — Hydro-instrument aesthetic
-       ═══════════════════════════════════════════════════ */
     :root {
-      --bg:          #EEF2F1;
-      --surface:     #FFFFFF;
-      --border:      #D8DEDC;
-      --border-deep: #BCC6C3;
-      --ink:         #16262B;
-      --ink-mid:     #3D5458;
-      --ink-muted:   #6E8489;
-      --accent:      #1E6E7A;
-      --accent-light:#E4F2F4;
-      --normal:      #4F7A5C;
-      --normal-bg:   #EBF3EE;
-      --watch:       #C97A2E;
-      --watch-bg:    #FDF2E4;
-      --alert:       #A63D2E;
-      --alert-bg:    #FAECE9;
-      --shadow:      0 1px 3px rgba(22,38,43,0.08), 0 1px 2px rgba(22,38,43,0.04);
-      --radius:      10px;
-      --font-head:   'Archivo', system-ui, sans-serif;
-      --font-mono:   'JetBrains Mono', 'Courier New', monospace;
+      /* Government / Military Grade Theme Colors */
+      --bg-main: #F4F6F8;
+      --bg-card: #FFFFFF;
+      --bg-header: #112E51; /* USWDS Navy */
+      --border-color: #BDBDBD;
+      --border-light: #E0E0E0;
+      
+      --text-main: #212121;
+      --text-muted: #616161;
+      --text-inverse: #FFFFFF;
+      
+      --accent: #005EA2;
+      --accent-hover: #1A4480;
+      
+      --status-normal: #2E7D32;
+      --status-watch: #E65100;
+      --status-alert: #D32F2F;
+
+      /* Professional / Standard Fonts */
+      --font-ui: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      --font-mono: 'Consolas', 'Courier New', monospace;
+      
+      --shadow-sm: none;
+      --shadow-md: 0 2px 4px rgba(0,0,0,0.1);
+      --radius: 0px; /* Sharp corners */
     }
 
-    /* ═══════════════════════════════════════════════════
-       RESET & BASE
-       ═══════════════════════════════════════════════════ */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    html { height: 100%; }
-
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
     body {
-      font-family: var(--font-head);
-      background-color: var(--bg);
-      color: var(--ink);
-      min-height: 100%;
+      font-family: var(--font-ui);
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      min-height: 100vh;
       display: flex;
       flex-direction: column;
-      -webkit-font-smoothing: antialiased;
-      /* Subtle topographic contour background — SVG data-URI, ~4% opacity */
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cg fill='none' stroke='%231E6E7A' stroke-width='0.8' opacity='0.06'%3E%3Cellipse cx='200' cy='200' rx='190' ry='80'/%3E%3Cellipse cx='200' cy='200' rx='150' ry='55'/%3E%3Cellipse cx='200' cy='200' rx='110' ry='35'/%3E%3Cellipse cx='200' cy='200' rx='70' ry='20'/%3E%3Cellipse cx='200' cy='200' rx='30' ry='10'/%3E%3Cellipse cx='80' cy='100' rx='70' ry='40'/%3E%3Cellipse cx='80' cy='100' rx='45' ry='25'/%3E%3Cellipse cx='320' cy='300' rx='80' ry='45'/%3E%3Cellipse cx='320' cy='300' rx='50' ry='28'/%3E%3C/g%3E%3C/svg%3E");
-      background-size: 400px 400px;
     }
 
-    /* ═══════════════════════════════════════════════════
-       SCROLLBAR
-       ═══════════════════════════════════════════════════ */
-    ::-webkit-scrollbar { width: 5px; height: 5px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--border-deep); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--ink-muted); }
+    /* SCROLLBAR */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: var(--bg-main); border-left: 1px solid var(--border-color); }
+    ::-webkit-scrollbar-thumb { background: #9E9E9E; border: 1px solid var(--bg-main); }
+    ::-webkit-scrollbar-thumb:hover { background: #757575; }
 
-    /* ═══════════════════════════════════════════════════
-       FOCUS STATES — accessibility
-       ═══════════════════════════════════════════════════ */
-    :focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
-      border-radius: 4px;
-    }
-
-    /* ═══════════════════════════════════════════════════
-       ALERT BANNER
-       ═══════════════════════════════════════════════════ */
-    #alertBanner {
-      display: none;
-      background: var(--alert-bg);
-      border-bottom: 2px solid var(--alert);
-      padding: 10px 24px;
-      text-align: center;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--alert);
-      letter-spacing: 0.02em;
-      position: sticky;
-      top: 0;
-      z-index: 60;
-    }
-    #alertBanner.visible { display: block; }
-    #alertBanner .banner-inner {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    /* ═══════════════════════════════════════════════════
-       API DISCONNECTED BANNER
-       ═══════════════════════════════════════════════════ */
-    #apiBanner {
-      display: none;
-      background: var(--watch-bg);
-      border-bottom: 1px solid var(--watch);
-      padding: 8px 24px;
-      text-align: center;
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--watch);
-    }
-    #apiBanner.visible { display: block; }
-
-    /* ═══════════════════════════════════════════════════
-       HEADER
-       ═══════════════════════════════════════════════════ */
+    /* HEADER */
     header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      position: sticky;
-      top: 0;
-      z-index: 50;
+      background: var(--bg-header);
+      color: var(--text-inverse);
       padding: 0 24px;
       height: 60px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      box-shadow: var(--shadow);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 4px solid var(--accent);
     }
 
-    .header-brand {
+    .brand {
       display: flex;
       align-items: center;
       gap: 12px;
     }
+    .brand svg { color: #FFFFFF; }
+    .brand-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .brand-subtitle {
+      font-size: 11px;
+      color: #E0E0E0;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
 
-    .brand-icon {
-      width: 36px;
-      height: 36px;
-      background: var(--accent-light);
-      border: 1px solid var(--accent);
-      border-radius: 8px;
+    /* TABS NAV */
+    .tabs-nav {
+      display: flex;
+      gap: 4px;
+      height: 100%;
+      align-items: flex-end;
+    }
+    .tab-btn {
+      background: #0A1F3F;
+      border: 1px solid #0A1F3F;
+      border-bottom: none;
+      color: #B0BEC5;
+      font-family: var(--font-ui);
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      cursor: pointer;
+      padding: 10px 16px;
       display: flex;
       align-items: center;
-      justify-content: center;
-      color: var(--accent);
-      flex-shrink: 0;
+      gap: 8px;
+      transition: all 0.2s;
     }
-
-    .brand-name {
-      font-size: 15px;
-      font-weight: 700;
-      color: var(--ink);
-      line-height: 1.1;
-    }
-
-    .brand-sub {
-      font-size: 10px;
-      font-weight: 400;
-      color: var(--ink-muted);
-      font-family: var(--font-mono);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-top: 1px;
+    .tab-btn:hover { background: #1A4480; color: #FFFFFF; }
+    .tab-btn.active { 
+      background: var(--bg-main); 
+      color: var(--bg-header); 
+      border: 1px solid var(--border-color);
+      border-bottom: none;
     }
 
     .header-controls {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 16px;
     }
-
-    /* API URL control */
-    .api-control {
-      display: none;
-      align-items: center;
-      gap: 6px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 5px 10px;
-      font-size: 11px;
-    }
-    @media (min-width: 640px) { .api-control { display: flex; } }
-
-    .api-control label {
-      color: var(--ink-muted);
-      font-family: var(--font-mono);
-      font-size: 10px;
-      white-space: nowrap;
-    }
-
-    #apiUrlInput {
-      background: transparent;
-      border: none;
-      outline: none;
-      color: var(--ink-mid);
-      font-family: var(--font-mono);
-      font-size: 10px;
-      width: 180px;
-    }
-
-    #syncBtn {
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: var(--ink-muted);
-      padding: 2px;
+    .status-badge {
       display: flex;
       align-items: center;
-      border-radius: 4px;
-      transition: color 0.15s;
-    }
-    #syncBtn:hover { color: var(--accent); }
-    #syncBtn.spinning { animation: spin 1s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* MQTT status pill */
-    .status-pill {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 5px 12px;
-      font-size: 11px;
-      font-weight: 500;
-      color: var(--ink-mid);
-      background: var(--surface);
-      transition: all 0.2s;
-    }
-    .status-pill.connected {
-      border-color: var(--normal);
-      color: var(--normal);
-      background: var(--normal-bg);
-    }
-    .status-pill.error {
-      border-color: var(--alert);
-      color: var(--alert);
-      background: var(--alert-bg);
-    }
-    .status-pill.connecting {
-      border-color: var(--watch);
-      color: var(--watch);
-      background: var(--watch-bg);
-    }
-
-    .status-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--border-deep);
-      flex-shrink: 0;
-      transition: background 0.2s;
-    }
-    .status-pill.connected .status-dot {
-      background: var(--normal);
-      box-shadow: 0 0 0 3px rgba(79,122,92,0.2);
-      animation: pulse-dot 2s ease-in-out infinite;
-    }
-    .status-pill.error .status-dot { background: var(--alert); }
-    .status-pill.connecting .status-dot { background: var(--watch); animation: pulse-dot 1s ease-in-out infinite; }
-
-    @keyframes pulse-dot {
-      0%, 100% { box-shadow: 0 0 0 2px rgba(79,122,92,0.15); }
-      50%       { box-shadow: 0 0 0 5px rgba(79,122,92,0.05); }
-    }
-
-    /* ═══════════════════════════════════════════════════
-       DEMO PANEL (only visible with ?demo=1)
-       ═══════════════════════════════════════════════════ */
-    #demoPanel {
-      display: none;
-      background: #FFF8E6;
-      border: 1px dashed var(--watch);
-      border-radius: var(--radius);
-      padding: 16px 20px;
-      margin-bottom: 24px;
-    }
-    #demoPanel.visible { display: block; }
-    .demo-title {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--watch);
-      margin-bottom: 12px;
-    }
-    .demo-fields {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
       gap: 8px;
-      margin-bottom: 12px;
-    }
-    .demo-field label {
-      display: block;
-      font-size: 10px;
-      font-family: var(--font-mono);
-      color: var(--ink-muted);
-      margin-bottom: 3px;
+      background: #FFFFFF;
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 700;
       text-transform: uppercase;
     }
-    .demo-field input {
-      width: 100%;
-      padding: 5px 8px;
-      border: 1px solid var(--border);
-      border-radius: 5px;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      color: var(--ink);
-      background: var(--surface);
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      background: #9E9E9E;
     }
-    .demo-field input:focus { border-color: var(--accent); outline: none; }
-    #demoSubmitBtn {
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      font-family: var(--font-head);
-      transition: background 0.15s;
-    }
-    #demoSubmitBtn:hover { background: #195d68; }
-    #demoResult {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      margin-top: 8px;
-      color: var(--ink-mid);
-      min-height: 16px;
-    }
+    .status-badge.connected .status-dot { background: var(--status-normal); }
+    .status-badge.error .status-dot { background: var(--status-alert); }
 
-    /* ═══════════════════════════════════════════════════
-       MAIN LAYOUT
-       ═══════════════════════════════════════════════════ */
+    /* MAIN CONTENT & TABS */
     main {
       flex: 1;
-      padding: 28px 24px;
+      padding: 24px;
       max-width: 1400px;
-      width: 100%;
       margin: 0 auto;
+      width: 100%;
     }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-    /* ═══════════════════════════════════════════════════
-       SECTION LABELS
-       ═══════════════════════════════════════════════════ */
-    .section-label {
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--ink-muted);
-      margin-bottom: 14px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .section-label::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
-
-    /* ═══════════════════════════════════════════════════
-       OVERVIEW STAT CARDS
-       ═══════════════════════════════════════════════════ */
-    .overview-grid {
+    /* OVERVIEW STATS */
+    .stats-grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 14px;
-      margin-bottom: 32px;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
     }
-    @media (min-width: 640px) { .overview-grid { grid-template-columns: repeat(4, 1fr); } }
-
     .stat-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 18px 20px;
-      box-shadow: var(--shadow);
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-top: 4px solid var(--bg-header);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
     }
-    .stat-label {
-      font-size: 10px;
-      font-weight: 600;
+    .stat-title {
+      font-size: 12px;
+      color: var(--text-muted);
       text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--ink-muted);
-      margin-bottom: 10px;
+      font-weight: 700;
     }
-    .stat-value {
-      font-family: var(--font-mono);
+    .stat-val {
       font-size: 32px;
       font-weight: 700;
-      color: var(--ink);
-      line-height: 1;
+      font-family: var(--font-mono);
+      line-height: 1.2;
     }
-    .stat-card.stat-alert { border-top: 3px solid var(--alert); }
-    .stat-card.stat-alert .stat-value { color: var(--alert); }
-    .stat-card.stat-watch { border-top: 3px solid var(--watch); }
-    .stat-card.stat-watch .stat-value { color: var(--watch); }
-    .stat-card.stat-accent { border-top: 3px solid var(--accent); }
-    .stat-card.stat-accent .stat-value { color: var(--accent); }
+    .val-accent { color: var(--accent); }
+    .val-alert { color: var(--status-alert); }
+    .val-watch { color: var(--status-watch); }
 
-    /* ═══════════════════════════════════════════════════
-       NODE GRID
-       ═══════════════════════════════════════════════════ */
+    /* NODE GRID (LIVE TAB) */
     .node-grid {
       display: grid;
-      grid-template-columns: 1fr;
-      gap: 18px;
-      margin-bottom: 32px;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 16px;
     }
-    @media (min-width: 640px)  { .node-grid { grid-template-columns: repeat(2, 1fr); } }
-    @media (min-width: 1024px) { .node-grid { grid-template-columns: repeat(3, 1fr); } }
-
-    /* ═══════════════════════════════════════════════════
-       EMPTY STATE
-       ═══════════════════════════════════════════════════ */
-    .empty-state {
-      grid-column: 1 / -1;
-      background: var(--surface);
-      border: 1px dashed var(--border-deep);
-      border-radius: var(--radius);
-      padding: 56px 24px;
-      text-align: center;
-    }
-    .empty-icon {
-      width: 48px;
-      height: 48px;
-      background: var(--accent-light);
-      border: 1px solid var(--accent);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--accent);
-      margin: 0 auto 16px;
-    }
-    .empty-state h3 {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--ink);
-      margin-bottom: 6px;
-    }
-    .empty-state p {
-      font-size: 12px;
-      color: var(--ink-muted);
-      max-width: 320px;
-      margin: 0 auto;
-      line-height: 1.6;
-    }
-
-    /* ═══════════════════════════════════════════════════
-       NODE CARD
-       ═══════════════════════════════════════════════════ */
     .node-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      overflow: hidden;
-      transition: border-color 0.25s, box-shadow 0.25s;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      box-shadow: var(--shadow-md);
     }
-    .node-card.state-alert {
-      border-color: var(--alert);
-      box-shadow: 0 0 0 2px rgba(166,61,46,0.12), var(--shadow);
-    }
-    .node-card.state-watch {
-      border-color: var(--watch);
-      box-shadow: 0 0 0 2px rgba(201,122,46,0.10), var(--shadow);
-    }
-    .node-card.state-normal {
-      border-color: var(--border);
-    }
-
-    /* Card header strip */
     .card-header {
-      padding: 14px 16px 12px;
-      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #F5F5F5;
+    }
+    .node-title {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
       display: flex;
       align-items: center;
-      justify-content: space-between;
       gap: 8px;
     }
-    .card-header.state-alert { background: var(--alert-bg); }
-    .card-header.state-watch { background: var(--watch-bg); }
-    .card-header.state-normal { background: var(--normal-bg); }
-
-    .card-node-info { min-width: 0; }
-    .card-node-name {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--ink);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      display: flex;
-      align-items: center;
-      gap: 7px;
-    }
-    .node-live-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      flex-shrink: 0;
-      background: var(--normal);
-      animation: pulse-live 2.5s ease-in-out infinite;
-    }
-    .state-alert .node-live-dot { background: var(--alert); animation: pulse-alert 1s ease-in-out infinite; }
-    .state-watch .node-live-dot { background: var(--watch); animation: pulse-live 1.5s ease-in-out infinite; }
-    @keyframes pulse-live  { 0%,100%{opacity:1} 50%{opacity:0.4} }
-    @keyframes pulse-alert { 0%,100%{opacity:1} 50%{opacity:0.3} }
-
-    .card-node-id {
-      font-size: 9px;
+    .node-id-sub {
       font-family: var(--font-mono);
-      color: var(--ink-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-top: 2px;
+      font-size: 11px;
+      color: var(--text-muted);
     }
-
-    .alert-badge {
-      font-size: 9px;
+    .alert-pill {
+      font-size: 11px;
       font-weight: 700;
-      letter-spacing: 0.12em;
       text-transform: uppercase;
-      padding: 3px 8px;
-      border-radius: 4px;
-      flex-shrink: 0;
-      border: 1px solid;
+      padding: 4px 8px;
+      border: 2px solid;
+      background: #FFFFFF;
     }
-    .badge-normal { background: var(--normal-bg); color: var(--normal); border-color: rgba(79,122,92,0.4); }
-    .badge-watch  { background: var(--watch-bg);  color: var(--watch);  border-color: rgba(201,122,46,0.4); }
-    .badge-alert  { background: var(--alert-bg);  color: var(--alert);  border-color: rgba(166,61,46,0.4); }
+    .pill-normal { color: var(--status-normal); border-color: var(--status-normal); }
+    .pill-watch { color: var(--status-watch); border-color: var(--status-watch); }
+    .pill-alert { color: var(--status-alert); border-color: var(--status-alert); }
 
-    /* Card body */
     .card-body { padding: 16px; }
-
-    /* Gauge + sensors row */
-    .card-main-row {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 14px;
-    }
-
-    /* Radial gauge */
-    .gauge-wrap {
-      flex-shrink: 0;
-    }
-    .gauge-svg { display: block; }
-    .gauge-center-text {
-      font-family: var(--font-mono);
-      font-weight: 700;
-      fill: var(--ink);
-    }
-    .gauge-unit {
-      font-family: var(--font-mono);
-      fill: var(--ink-muted);
-    }
-
-    /* Sensor grid */
+    
     .sensor-grid {
-      flex: 1;
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
+      gap: 1px;
+      background: var(--border-color);
+      border: 1px solid var(--border-color);
+      margin-bottom: 16px;
     }
-    .sensor-cell {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      padding: 8px 10px;
+    .sensor-item {
+      background: #FFFFFF;
+      padding: 12px;
     }
     .sensor-lbl {
-      font-size: 9px;
-      font-weight: 600;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
       text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--ink-muted);
-      margin-bottom: 3px;
+      font-weight: 700;
     }
     .sensor-val {
       font-family: var(--font-mono);
-      font-size: 14px;
+      font-size: 20px;
       font-weight: 700;
-      color: var(--ink);
-      line-height: 1;
+      color: var(--text-main);
     }
-    .sensor-unit {
-      font-size: 10px;
-      font-weight: 400;
-      color: var(--ink-muted);
-      margin-left: 2px;
-    }
-    .sensor-val.high { color: var(--alert); }
-    .sensor-val.med  { color: var(--watch); }
+    .sensor-unit { font-size: 12px; color: var(--text-muted); font-family: var(--font-ui); margin-left: 4px;}
 
-    /* ML prob segmented bar */
-    .prob-section { margin-bottom: 12px; }
-    .prob-header {
+    /* ML Probabilities Bar Chart */
+    .ml-section {
+      background: #F9F9F9;
+      border: 1px solid var(--border-color);
+      padding: 12px;
+    }
+    .ml-title {
+      font-size: 11px;
+      color: var(--text-main);
+      margin-bottom: 8px;
+      font-weight: 700;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border-light);
+      padding-bottom: 4px;
+    }
+    .ml-bars {
       display: flex;
-      justify-content: space-between;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .ml-bar-row {
+      display: flex;
       align-items: center;
-      margin-bottom: 5px;
-    }
-    .prob-lbl {
-      font-size: 9px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--ink-muted);
-    }
-    .prob-vals {
+      gap: 8px;
+      font-size: 11px;
       font-family: var(--font-mono);
-      font-size: 9px;
-      color: var(--ink-muted);
     }
-    .prob-bar-track {
-      height: 5px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      display: flex;
-      overflow: hidden;
+    .ml-lbl { width: 55px; color: var(--text-muted); font-weight: 700; }
+    .ml-track {
+      flex: 1;
+      height: 8px;
+      background: #E0E0E0;
+      border: 1px solid #BDBDBD;
     }
-    .pb-normal { background: var(--normal); transition: width 0.7s cubic-bezier(.4,0,.2,1); }
-    .pb-watch  { background: var(--watch);  transition: width 0.7s cubic-bezier(.4,0,.2,1); }
-    .pb-alert  { background: var(--alert);  transition: width 0.7s cubic-bezier(.4,0,.2,1); }
+    .ml-fill { height: 100%; transition: width 0.3s ease; }
+    .ml-val { width: 35px; text-align: right; color: var(--text-main); font-weight: 700;}
+    
+    .fill-n { background: var(--status-normal); }
+    .fill-w { background: var(--status-watch); }
+    .fill-a { background: var(--status-alert); }
 
-    /* Sparkline */
-    .sparkline-wrap {
-      height: 44px;
-      width: 100%;
-      position: relative;
-    }
-    .sparkline-label {
-      font-size: 8px;
-      font-family: var(--font-mono);
-      color: var(--ink-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 3px;
-    }
-
-    /* Card footer timestamp */
     .card-footer {
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--border-color);
       padding: 8px 16px;
-      font-size: 9px;
-      font-family: var(--font-mono);
-      color: var(--ink-muted);
-      display: flex;
-      justify-content: space-between;
-    }
-
-    /* Flash update animation */
-    @keyframes flash-update {
-      0%   { background-color: rgba(30,110,122,0.10); }
-      100% { background-color: transparent; }
-    }
-    .flash-update { animation: flash-update 0.6s ease-out; }
-
-    /* ═══════════════════════════════════════════════════
-       EVENT LOG
-       ═══════════════════════════════════════════════════ */
-    .log-panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      box-shadow: var(--shadow);
-      margin-bottom: 24px;
-    }
-    .log-header {
-      background: var(--bg);
-      border-bottom: 1px solid var(--border);
-      padding: 10px 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .log-header-label {
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--ink-muted);
-    }
-    #clearLogBtn {
-      font-size: 10px;
-      color: var(--ink-muted);
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-family: var(--font-head);
-      padding: 2px 6px;
-      border-radius: 4px;
-      transition: color 0.15s;
-    }
-    #clearLogBtn:hover { color: var(--alert); }
-
-    #eventLog {
-      height: 152px;
-      overflow-y: auto;
-      padding: 10px 16px;
       font-family: var(--font-mono);
       font-size: 11px;
-      line-height: 1.6;
-    }
-    .log-row {
+      color: var(--text-muted);
       display: flex;
-      gap: 12px;
-      padding: 1px 0;
+      justify-content: space-between;
+      background: #F5F5F5;
     }
-    .log-ts   { color: var(--ink-muted); white-space: nowrap; flex-shrink: 0; }
-    .log-node { color: var(--ink-mid); width: 70px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .log-msg  { flex: 1; word-break: break-all; }
-    .log-msg.level-ALERT  { color: var(--alert); }
-    .log-msg.level-WATCH  { color: var(--watch); }
-    .log-msg.level-NORMAL { color: var(--normal); }
-    .log-msg.level-INFO   { color: var(--accent); }
-    .log-msg.level-WARN   { color: var(--watch); }
 
-    /* ═══════════════════════════════════════════════════
-       FOOTER
-       ═══════════════════════════════════════════════════ */
-    footer {
-      background: var(--surface);
-      border-top: 1px solid var(--border);
-      padding: 12px 24px;
+    /* TOPOLOGY TAB */
+    .topology-container {
+      display: grid;
+      grid-template-columns: 1fr 350px;
+      gap: 16px;
+      height: 600px;
+    }
+    .blueprint-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+    .blueprint-title {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--bg-header);
+      border-bottom: 2px solid var(--bg-header);
+      padding-bottom: 8px;
+    }
+    .svg-container {
+      flex: 1;
+      background: #FFFFFF;
+      border: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      overflow: hidden;
+    }
+    .wokwi-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    /* ANALYTICS TAB */
+    .analytics-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      padding: 16px;
+      height: 450px;
+    }
+    
+    /* EVENT LOG */
+    .log-panel {
+      margin-top: 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+    }
+    .log-header {
+      padding: 8px 16px;
+      background: #E0E0E0;
+      border-bottom: 1px solid var(--border-color);
+      font-weight: 700;
+      font-size: 12px;
+      text-transform: uppercase;
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-main);
+    }
+    .log-body {
+      height: 150px;
+      overflow-y: auto;
+      padding: 8px 16px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .log-row { padding: 4px 0; display: flex; gap: 16px; border-bottom: 1px solid #EEEEEE; }
+    .log-time { color: var(--text-muted); width: 80px; }
+    .log-node { color: var(--accent); width: 100px; font-weight: bold;}
+    .log-msg { flex: 1; color: var(--text-main); }
+    .log-msg.log-alert { color: var(--status-alert); font-weight: bold;}
+    .log-msg.log-watch { color: var(--status-watch); font-weight: bold;}
+
+    /* SIMULATION PANEL */
+    .sim-panel {
+      background: #E3F2FD;
+      border: 1px solid var(--accent);
+      border-left: 6px solid var(--accent);
+      padding: 12px 16px;
+      margin-bottom: 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      font-size: 10px;
-      color: var(--ink-muted);
     }
-    footer a { color: var(--accent); text-decoration: none; }
-    footer .footer-mono { font-family: var(--font-mono); }
+    .sim-btn {
+      background: var(--accent);
+      color: #FFFFFF;
+      border: 1px solid var(--accent-hover);
+      padding: 8px 16px;
+      font-weight: 700;
+      font-family: var(--font-ui);
+      text-transform: uppercase;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sim-btn:hover { background: var(--accent-hover); }
+    .sim-btn.active { background: var(--status-alert); border-color: #B71C1C; }
+    .sim-btn.active:hover { background: #B71C1C; }
   </style>
 </head>
 <body>
 
-  <!-- ── Flood Alert Banner (aria-live for screen readers) ── -->
-  <div id="alertBanner" role="alert" aria-live="polite">
-    <div class="banner-inner">
-      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-      </svg>
-      CRITICAL FLOOD WARNING — <span id="alertNodes" style="margin-left:4px;"></span>
-    </div>
-  </div>
-
-  <!-- ── API Disconnected Banner ── -->
-  <div id="apiBanner" role="status" aria-live="polite">
-    <span id="apiBannerText">⚠ REST API Disconnected — retrying…</span>
-  </div>
-
-  <!-- ── Header ── -->
   <header>
-    <div class="header-brand">
-      <div class="brand-icon" aria-hidden="true">
-        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/>
-          <path d="M3 12s1.5-3 4.5-3 4.5 6 9 6 4.5-3 4.5-3"/>
-          <path d="M12 7v2m0 6v2"/>
-        </svg>
-      </div>
+    <div class="brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 12h4l3-9 5 18 3-9h5"/>
+      </svg>
       <div>
-        <div class="brand-name">FloodSense</div>
-        <div class="brand-sub">Multi-Node Hydro-Telemetry</div>
+        <div class="brand-title">FloodSense</div>
+        <div class="brand-subtitle">Command Center</div>
       </div>
+    </div>
+
+    <div class="tabs-nav">
+      <button class="tab-btn active" onclick="switchTab('live')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+        Live Telemetry
+      </button>
+      <button class="tab-btn" onclick="switchTab('topology')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+        System Topology
+      </button>
+      <button class="tab-btn" onclick="switchTab('analytics')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Historical Analytics
+      </button>
     </div>
 
     <div class="header-controls">
-      <!-- API URL override (dev use) -->
-      <div class="api-control" title="Configure REST API endpoint (local dev override)">
-        <label for="apiUrlInput">API</label>
-        <input id="apiUrlInput" type="text" placeholder="https://your-render-url.onrender.com" aria-label="Backend API URL">
-        <button id="syncBtn" aria-label="Sync data from backend">
-          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H17"/>
-          </svg>
-        </button>
-      </div>
-
-      <!-- MQTT connection state -->
-      <div id="mqttStatus" class="status-pill connecting" role="status">
-        <span class="status-dot" id="mqttDot"></span>
-        <span id="mqttLabel">Connecting…</span>
+      <div id="mqttStatus" class="status-badge error">
+        <div class="status-dot"></div>
+        <span id="mqttLabel">Disconnected</span>
       </div>
     </div>
   </header>
 
-  <!-- ── Main ── -->
   <main>
-
-    <!-- Demo panel: only shown with ?demo=1 in URL -->
-    <div id="demoPanel" aria-label="Development simulation panel">
-      <div class="demo-title">⚙ Dev Mode — Simulate Sensor Reading (not visible on public dashboard)</div>
-      <div class="demo-fields">
-        <div class="demo-field">
-          <label>Node ID</label>
-          <input id="d_node_id" value="sim-node-1">
+    <!-- SIMULATION OVERRIDE -->
+    <div id="demoPanel" class="sim-panel" style="display: none;">
+      <div>
+        <div style="font-weight: 600; margin-bottom: 4px; display:flex; align-items:center; gap:8px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Developer Simulation Mode
         </div>
-        <div class="demo-field">
-          <label>Water Level (m)</label>
-          <input id="d_water" type="number" step="0.1" value="35.0">
-        </div>
-        <div class="demo-field">
-          <label>Rainfall 24h (mm)</label>
-          <input id="d_rain" type="number" step="0.5" value="32.0">
-        </div>
-        <div class="demo-field">
-          <label>Soil Moisture (%)</label>
-          <input id="d_soil" type="number" step="1" value="91.0">
-        </div>
-        <div class="demo-field">
-          <label>Flow Velocity (m/s)</label>
-          <input id="d_flow" type="number" step="0.1" value="3.5">
-        </div>
-        <div class="demo-field">
-          <label>Turbidity (NTU)</label>
-          <input id="d_turb" type="number" step="10" value="720">
-        </div>
+        <div style="font-size: 12px; color: var(--text-muted);">Simulates 5 active sensor nodes sending data every 4 seconds. ML predictions update in real-time.</div>
       </div>
-      <button id="demoSubmitBtn">▶ Inject Simulated Reading</button>
-      <div id="demoResult"></div>
+      <button id="autoSimBtn" class="sim-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Start Auto-Simulation
+      </button>
     </div>
 
-    <!-- ── Overview Stats ── -->
-    <section aria-label="System overview">
-      <div class="section-label">Station Overview</div>
-      <div class="overview-grid">
-        <div class="stat-card stat-accent">
-          <div class="stat-label">Active Nodes</div>
-          <div class="stat-value" id="sumNodes">0</div>
-        </div>
-        <div class="stat-card stat-alert">
-          <div class="stat-label">Critical Alerts</div>
-          <div class="stat-value" id="sumAlert">0</div>
-        </div>
-        <div class="stat-card stat-watch">
-          <div class="stat-label">Watch Status</div>
-          <div class="stat-value" id="sumWatch">0</div>
+    <!-- TAB: LIVE TELEMETRY -->
+    <div id="tab-live" class="tab-content active">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-title">Active Stations</div>
+          <div class="stat-val val-accent" id="sumNodes">0</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Total Packets</div>
-          <div class="stat-value" id="sumMessages">0</div>
+          <div class="stat-title">Critical Alerts</div>
+          <div class="stat-val val-alert" id="sumAlert">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">Watch Status</div>
+          <div class="stat-val val-watch" id="sumWatch">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">Total Packets</div>
+          <div class="stat-val" id="sumMessages">0</div>
         </div>
       </div>
-    </section>
 
-    <!-- ── Live Node Grid ── -->
-    <section aria-label="Live sensor stations">
-      <div class="section-label">Live Sensor Stations</div>
       <div class="node-grid" id="nodeGrid">
-        <!-- Empty state -->
-        <div class="empty-state" id="emptyState">
-          <div class="empty-icon" aria-hidden="true">
-            <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-              <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/>
-              <path d="M12 8v4m0 4h.01"/>
+        <!-- JS populates cards here -->
+      </div>
+      
+      <div style="display: grid; grid-template-columns: 1fr 350px; gap: 24px; margin-top: 24px;">
+        <div class="log-panel" style="margin-top: 0;">
+          <div class="log-header">
+            <div>System Event Log</div>
+            <button onclick="clearLog()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;">Clear</button>
+          </div>
+          <div class="log-body" id="eventLog">
+            <div class="log-row">
+              <span class="log-time">--:--:--</span>
+              <span class="log-node">system</span>
+              <span class="log-msg">Dashboard initialized. Waiting for telemetry...</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="log-panel" style="margin-top: 0; background: #FFF3E0; border-color: #FF9800;">
+          <div class="log-header" style="background: #FFE0B2; color: #E65100;">
+            <div>Manual Telemetry Inject</div>
+          </div>
+          <div style="padding: 12px; font-size: 13px;">
+            <div style="margin-bottom: 8px;">
+              <label style="display:block; font-weight: 600; color: #E65100; margin-bottom: 2px;">Node ID</label>
+              <input type="text" id="manualNodeId" value="manual-1" style="width:100%; padding: 4px; border: 1px solid #FFCC80; border-radius: 4px;">
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+              <div>
+                <label style="display:block; font-weight: 600; color: #E65100; margin-bottom: 2px;">Water Lvl (m)</label>
+                <input type="number" id="manualWL" value="30.0" style="width:100%; padding: 4px; border: 1px solid #FFCC80; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; font-weight: 600; color: #E65100; margin-bottom: 2px;">Rain (mm)</label>
+                <input type="number" id="manualRain" value="50.0" style="width:100%; padding: 4px; border: 1px solid #FFCC80; border-radius: 4px;">
+              </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+              <div>
+                <label style="display:block; font-weight: 600; color: #E65100; margin-bottom: 2px;">Soil %</label>
+                <input type="number" id="manualSoil" value="85" style="width:100%; padding: 4px; border: 1px solid #FFCC80; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; font-weight: 600; color: #E65100; margin-bottom: 2px;">Vel (m/s)</label>
+                <input type="number" id="manualVel" value="4.0" style="width:100%; padding: 4px; border: 1px solid #FFCC80; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; font-weight: 600; color: #E65100; margin-bottom: 2px;">Turb (NTU)</label>
+                <input type="number" id="manualTurb" value="600" style="width:100%; padding: 4px; border: 1px solid #FFCC80; border-radius: 4px;">
+              </div>
+            </div>
+            <button onclick="submitManualTelemetry()" style="width: 100%; background: #E65100; color: white; border: none; padding: 8px; font-weight: 700; cursor: pointer; text-transform: uppercase;">
+              Inject & Trigger ML
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: TOPOLOGY -->
+    <div id="tab-topology" class="tab-content">
+      <div class="topology-container">
+        <div class="blueprint-panel">
+          <div class="blueprint-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+            System Architecture Blueprint
+          </div>
+          <div class="svg-container">
+            <!-- Impressive SVG Diagram -->
+            <svg viewBox="0 0 600 400" width="100%" height="100%">
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+                </marker>
+                <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#1e293b"/>
+                  <stop offset="100%" stop-color="#0f172a"/>
+                </linearGradient>
+              </defs>
+              
+              <!-- Nodes -->
+              <rect x="50" y="50" width="100" height="60" rx="8" fill="url(#grad)" stroke="#38bdf8" stroke-width="2"/>
+              <text x="100" y="75" fill="#f8fafc" font-family="Inter" font-size="12" font-weight="600" text-anchor="middle">ESP32 Node 1</text>
+              <text x="100" y="90" fill="#94a3b8" font-family="Inter" font-size="10" text-anchor="middle">Sensors</text>
+              
+              <rect x="50" y="150" width="100" height="60" rx="8" fill="url(#grad)" stroke="#38bdf8" stroke-width="2"/>
+              <text x="100" y="175" fill="#f8fafc" font-family="Inter" font-size="12" font-weight="600" text-anchor="middle">ESP32 Node 2</text>
+              <text x="100" y="190" fill="#94a3b8" font-family="Inter" font-size="10" text-anchor="middle">Sensors</text>
+
+              <rect x="50" y="250" width="100" height="60" rx="8" fill="url(#grad)" stroke="#38bdf8" stroke-width="2"/>
+              <text x="100" y="275" fill="#f8fafc" font-family="Inter" font-size="12" font-weight="600" text-anchor="middle">ESP32 Node N</text>
+
+              <!-- Broker -->
+              <rect x="250" y="125" width="100" height="110" rx="8" fill="url(#grad)" stroke="#10b981" stroke-width="2"/>
+              <text x="300" y="175" fill="#f8fafc" font-family="Inter" font-size="14" font-weight="bold" text-anchor="middle">HiveMQ</text>
+              <text x="300" y="195" fill="#94a3b8" font-family="JetBrains Mono" font-size="10" text-anchor="middle">MQTT Broker</text>
+              
+              <!-- Backend -->
+              <rect x="450" y="50" width="100" height="100" rx="8" fill="url(#grad)" stroke="#f59e0b" stroke-width="2"/>
+              <text x="500" y="90" fill="#f8fafc" font-family="Inter" font-size="12" font-weight="bold" text-anchor="middle">Python API</text>
+              <text x="500" y="110" fill="#94a3b8" font-family="Inter" font-size="10" text-anchor="middle">Flask + Scikit</text>
+              <text x="500" y="125" fill="#94a3b8" font-family="Inter" font-size="10" text-anchor="middle">Random Forest</text>
+
+              <!-- WhatsApp -->
+              <rect x="450" y="210" width="100" height="80" rx="8" fill="url(#grad)" stroke="#ef4444" stroke-width="2"/>
+              <text x="500" y="245" fill="#f8fafc" font-family="Inter" font-size="12" font-weight="bold" text-anchor="middle">Twilio</text>
+              <text x="500" y="265" fill="#94a3b8" font-family="Inter" font-size="10" text-anchor="middle">WhatsApp API</text>
+
+              <!-- Lines -->
+              <path d="M 150 80 Q 200 80 250 150" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+              <path d="M 150 180 L 245 180" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+              <path d="M 150 280 Q 200 280 250 210" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+
+              <path d="M 350 160 L 445 120" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+              <path d="M 500 150 L 500 205" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+              <path d="M 450 80 Q 400 30 300 120" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="4,4" marker-end="url(#arrow)"/>
             </svg>
           </div>
-          <h3>Awaiting Station Data</h3>
-          <p>MQTT bridge is connecting to HiveMQ. Node cards will appear as sensor telemetry arrives. Use <code>?demo=1</code> to inject a test reading.</p>
         </div>
-      </div>
-    </section>
-
-    <!-- ── Event Log ── -->
-    <section aria-label="Live event console">
-      <div class="section-label">Live Events Console</div>
-      <div class="log-panel">
-        <div class="log-header">
-          <span class="log-header-label">System Log</span>
-          <button id="clearLogBtn">Clear</button>
-        </div>
-        <div id="eventLog" role="log" aria-label="Event log">
-          <div class="log-row">
-            <span class="log-ts">--:--:--</span>
-            <span class="log-node">system</span>
-            <span class="log-msg level-INFO">Initializing listener. Waiting for events…</span>
+        <div class="wokwi-panel">
+          <div class="blueprint-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--status-watch)" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            Hardware Simulator
+          </div>
+          <div style="flex:1; background:var(--bg-dark); border:1px solid var(--border-color); border-radius:8px; overflow:hidden;">
+            <iframe src="https://wokwi.com/projects/322577683855704658?embed=1" width="100%" height="100%" frameborder="0" style="min-height: 500px;"></iframe>
           </div>
         </div>
       </div>
-    </section>
+    </div>
+
+    <!-- TAB: ANALYTICS -->
+    <div id="tab-history" class="tab-content">
+      <div class="analytics-grid">
+        <div class="chart-card">
+          <div style="font-weight:600; margin-bottom:16px; font-size:14px;">Historical Water Levels (All Nodes)</div>
+          <div style="position:relative; height:calc(100% - 30px); width:100%;">
+            <canvas id="historyChartWL"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
 
   </main>
 
-  <!-- ── Footer ── -->
-  <footer>
-    <span>© 2026 FloodSense</span>
-    <span class="footer-mono">HiveMQ · Random Forest · Twilio WhatsApp</span>
-  </footer>
-
   <script>
     // ═══════════════════════════════════════════════════════
-    //  CONFIG
-    //  ↓↓↓ Replace this with your actual Render service URL ↓↓↓
+    // CONFIG & STATE
     // ═══════════════════════════════════════════════════════
-    const PRODUCTION_BACKEND_URL = "https://floodsense.onrender.com"; // ← YOUR RENDER URL
-    const BROKER_WSS        = "wss://broker.hivemq.com:8884/mqtt";
-    const TOPIC_SENSOR_ALL  = "flood/sensor/+";
-    const TOPIC_ALERT_ALL   = "flood/alert/+";
-    const CLIENT_ID         = "dashboard-" + Math.random().toString(16).slice(2, 10);
+    const BROKER_WSS = "wss://broker.hivemq.com:8884/mqtt";
+    const CLIENT_ID  = "dashboard-pro-" + Math.random().toString(16).slice(2, 10);
+    const TOPIC_IN   = "flood/alert/+";
 
-    // ─── State ───
     const nodeData = {};
-    let msgCount   = 0;
-    const charts   = {};
+    let msgCount = 0;
+    let mainChart;
 
-    // ─── Demo mode: active when URL contains ?demo=1 ───
     const DEMO_MODE = new URLSearchParams(location.search).get("demo") === "1";
+    if (DEMO_MODE) document.getElementById("demoPanel").style.display = "flex";
 
-    // ─── API URL: localStorage override, else production constant ───
-    let backendApiUrl = localStorage.getItem("flood_backend_url") || PRODUCTION_BACKEND_URL;
-
-    const $ = id => document.getElementById(id);
-
-    $("apiUrlInput").value = backendApiUrl;
-    if (DEMO_MODE) { $("demoPanel").classList.add("visible"); }
-
-    // ─── API URL change handler ───
-    $("apiUrlInput").addEventListener("change", e => {
-      backendApiUrl = e.target.value.trim().replace(/\/$/, "");
-      localStorage.setItem("flood_backend_url", backendApiUrl);
-      logEvent("system", "INFO", `REST endpoint updated → ${backendApiUrl}`);
-      apiSyncWithBackoff(0);
-    });
-
-    $("syncBtn").addEventListener("click", () => apiSyncWithBackoff(0));
-    $("clearLogBtn").addEventListener("click", () => {
-      $("eventLog").innerHTML = '<div class="log-row"><span class="log-ts">--:--:--</span><span class="log-node">system</span><span class="log-msg level-INFO">Console cleared.</span></div>';
-    });
-
-    // ─── Helpers ───
-    function fmt(val, dec = 1) { return (val == null) ? "—" : Number(val).toFixed(dec); }
-    function timeNow() {
-      return new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    // ── TAB SWITCHING ──
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+      document.getElementById('tab-' + tabId).classList.add('active');
     }
 
-    // ─── Logger ───
-    function logEvent(nodeId, level, msg) {
-      const log  = $("eventLog");
-      const row  = document.createElement("div");
+    // ── LOGGER ──
+    function logEvent(node, msg, level) {
+      const log = document.getElementById("eventLog");
+      const row = document.createElement("div");
       row.className = "log-row";
+      const time = new Date().toLocaleTimeString("en-GB");
+      let cls = "";
+      if(level==="ALERT") cls="log-alert";
+      else if(level==="WATCH") cls="log-watch";
+      
       row.innerHTML = `
-        <span class="log-ts">${timeNow()}</span>
-        <span class="log-node" title="${nodeId}">${nodeId}</span>
-        <span class="log-msg level-${level}">${msg}</span>
+        <span class="log-time">${time}</span>
+        <span class="log-node">${node}</span>
+        <span class="log-msg ${cls}">${msg}</span>
       `;
       log.prepend(row);
-      while (log.children.length > 120) log.removeChild(log.lastChild);
+      if(log.children.length > 50) log.removeChild(log.lastChild);
     }
+    function clearLog() { document.getElementById("eventLog").innerHTML = ""; }
 
-    // ─── Alert Banner ───
-    function updateAlertBanner() {
-      const alertNodes = Object.values(nodeData)
-        .filter(n => n.alert === "ALERT")
-        .map(n => n.node_label || n.node_id);
-      const banner = $("alertBanner");
-      if (alertNodes.length > 0) {
-        banner.classList.add("visible");
-        $("alertNodes").textContent = alertNodes.join(" · ");
-      } else {
-        banner.classList.remove("visible");
-      }
-    }
+    // ── RENDERER ──
+    function renderNodeCard(nodeId, data) {
+      const grid = document.getElementById("nodeGrid");
+      let card = document.getElementById("card-" + nodeId);
+      
+      const prob = data.probabilities || {NORMAL:1, WATCH:0, ALERT:0};
+      const alertLvl = data.alert_level || "NORMAL";
+      const isAlert = alertLvl === "ALERT";
+      const isWatch = alertLvl === "WATCH";
+      const pillCls = isAlert ? "pill-alert" : isWatch ? "pill-watch" : "pill-normal";
+      const borderCls = isAlert ? "var(--status-alert)" : isWatch ? "var(--status-watch)" : "var(--border-color)";
 
-    // ─── Summary ───
-    function updateSummary() {
-      const nodes = Object.values(nodeData);
-      $("sumNodes").textContent    = nodes.length;
-      $("sumAlert").textContent    = nodes.filter(n => n.alert === "ALERT").length;
-      $("sumWatch").textContent    = nodes.filter(n => n.alert === "WATCH").length;
-      $("sumMessages").textContent = msgCount;
-    }
-
-    // ═══════════════════════════════════════════════════════
-    //  RADIAL GAUGE (SVG, no canvas)
-    // ═══════════════════════════════════════════════════════
-    // Returns SVG string for a gauge dial.
-    // value: 0–100 (percentage of max scale)
-    // state: "normal"|"watch"|"alert"
-    function buildGaugeSVG(value, state, centerLabel, unit) {
-      const W = 90, H = 56, R = 38, CX = 45, CY = 48;
-      const minAngle = -200, maxAngle = 20;   // degrees, from 9-o'clock sweep
-
-      // Clamp value 0–100
-      const v    = Math.max(0, Math.min(100, value || 0));
-      const frac = v / 100;
-      const needleAngle = minAngle + frac * (maxAngle - minAngle);
-
-      // Arc path helper (SVG arc)
-      function polarToCart(cx, cy, r, angleDeg) {
-        const rad = (angleDeg - 90) * (Math.PI / 180);
-        return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-      }
-      function arcPath(cx, cy, r, startDeg, endDeg, color) {
-        const s = polarToCart(cx, cy, r, startDeg);
-        const e = polarToCart(cx, cy, r, endDeg);
-        const large = (endDeg - startDeg) > 180 ? 1 : 0;
-        return `<path d="M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}"
-                  fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round"/>`;
+      if (!card) {
+        card = document.createElement("div");
+        card.id = "card-" + nodeId;
+        card.className = "node-card";
+        grid.appendChild(card);
       }
 
-      // Arc zones (0–60% normal, 60–80% watch, 80–100% alert)
-      const startDeg = minAngle - 90 + 90;  // convert to SVG coord
-      const arcS = -200 + 90;               // = -110
-      const arcE =   20 + 90;               // =  110
-      const w60  = arcS + 0.60 * (arcE - arcS);
-      const w80  = arcS + 0.80 * (arcE - arcS);
-      const nEnd = arcS + frac * (arcE - arcS);
+      card.style.borderColor = borderCls;
+      
+      card.innerHTML = `
+        <div class="card-header">
+          <div class="node-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <div>
+              ${nodeId.replace(/-/g, ' ').toUpperCase()}
+              <div class="node-id-sub">ID: ${nodeId}</div>
+            </div>
+          </div>
+          <div class="alert-pill ${pillCls}">${alertLvl}</div>
+        </div>
+        <div class="card-body">
+          <div class="sensor-grid">
+            <div class="sensor-item">
+              <div class="sensor-lbl"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg> Water Level</div>
+              <div class="sensor-val">${(data.water_level_m||0).toFixed(1)}<span class="sensor-unit">m</span></div>
+            </div>
+            <div class="sensor-item">
+              <div class="sensor-lbl"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25"/><path d="M8 16h.01M8 20h.01M12 18h.01M12 22h.01M16 16h.01M16 20h.01"/></svg> Rainfall</div>
+              <div class="sensor-val">${(data.rainfall_24h_mm||0).toFixed(1)}<span class="sensor-unit">mm</span></div>
+            </div>
+          </div>
 
-      // Track
-      const track = arcPath(CX, CY, R, arcS, arcE, "#D8DEDC");
-      // Filled value arc
-      let fillColor = "#4F7A5C";
-      if (state === "alert") fillColor = "#A63D2E";
-      else if (state === "watch") fillColor = "#C97A2E";
-      const fill = frac > 0 ? arcPath(CX, CY, R, arcS, nEnd, fillColor) : "";
-
-      // Zone tick marks
-      const tick60 = polarToCart(CX, CY, R + 5, w60 - 90 + 90);
-      const tick80 = polarToCart(CX, CY, R + 5, w80 - 90 + 90);
-
-      // Needle
-      const needleDeg = needleAngle - 90 + 90; // already in SVG coord
-      const nTip  = polarToCart(CX, CY, R - 6, needleDeg);
-      const nBase = polarToCart(CX, CY, -4, needleDeg + 90);
-      const nBase2= polarToCart(CX, CY, -4, needleDeg - 90);
-
-      const needleColor = state === "alert" ? "#A63D2E" : state === "watch" ? "#C97A2E" : "#1E6E7A";
-
-      return `
-        <svg class="gauge-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">
-          ${track}
-          ${fill}
-          <line x1="${CX}" y1="${CY}" x2="${nTip.x}" y2="${nTip.y}"
-            stroke="${needleColor}" stroke-width="2.5" stroke-linecap="round"/>
-          <circle cx="${CX}" cy="${CY}" r="4" fill="${needleColor}"/>
-          <text x="${CX}" y="${CY - 12}" text-anchor="middle"
-            class="gauge-center-text" font-size="12" font-family="'JetBrains Mono',monospace" fill="#16262B" font-weight="700">${centerLabel}</text>
-          <text x="${CX}" y="${CY - 2}" text-anchor="middle"
-            font-size="7" font-family="'JetBrains Mono',monospace" fill="#6E8489">${unit}</text>
-        </svg>
+          <div class="ml-section">
+            <div class="ml-title">ML Prediction Probabilities</div>
+            <div class="ml-bars">
+              <div class="ml-bar-row">
+                <span class="ml-lbl">NORMAL</span>
+                <div class="ml-track"><div class="ml-fill fill-n" style="width:${prob.NORMAL*100}%"></div></div>
+                <span class="ml-val">${(prob.NORMAL*100).toFixed(0)}%</span>
+              </div>
+              <div class="ml-bar-row">
+                <span class="ml-lbl">WATCH</span>
+                <div class="ml-track"><div class="ml-fill fill-w" style="width:${prob.WATCH*100}%"></div></div>
+                <span class="ml-val">${(prob.WATCH*100).toFixed(0)}%</span>
+              </div>
+              <div class="ml-bar-row">
+                <span class="ml-lbl">ALERT</span>
+                <div class="ml-track"><div class="ml-fill fill-a" style="width:${prob.ALERT*100}%"></div></div>
+                <span class="ml-val">${(prob.ALERT*100).toFixed(0)}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-footer">
+          <span>LAST UPDATED</span>
+          <span>${data.timestamp || new Date().toLocaleTimeString("en-GB")}</span>
+        </div>
       `;
     }
 
-    // ═══════════════════════════════════════════════════════
-    //  SPARKLINE (Chart.js)
-    // ═══════════════════════════════════════════════════════
-    function getOrCreateChart(nodeId, canvasEl, state) {
-      if (charts[nodeId]) return charts[nodeId];
-      const lineColor = state === "alert" ? "#A63D2E" : state === "watch" ? "#C97A2E" : "#1E6E7A";
-      const ctx = canvasEl.getContext("2d");
-      const chart = new Chart(ctx, {
-        type: "line",
-        data: {
-          labels: [],
-          datasets: [{
-            data: [],
-            borderColor: lineColor,
-            backgroundColor: lineColor + "18",
-            borderWidth: 1.5,
-            pointRadius: 0,
-            tension: 0.35,
-            fill: true,
-          }]
-        },
+    function updateSummary() {
+      const nodes = Object.values(nodeData);
+      document.getElementById("sumNodes").textContent = nodes.length;
+      document.getElementById("sumAlert").textContent = nodes.filter(n => n.alert_level === "ALERT").length;
+      document.getElementById("sumWatch").textContent = nodes.filter(n => n.alert_level === "WATCH").length;
+      document.getElementById("sumMessages").textContent = msgCount;
+    }
+
+    // ── CHART.JS ──
+    function initChart() {
+      const ctx = document.getElementById('historyChartWL').getContext('2d');
+      mainChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [] },
         options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false }, tooltip: { enabled: false } },
-          scales: { x: { display: false }, y: { display: false, min: 0 } },
-          animation: { duration: 200 }
+          responsive: true, maintainAspectRatio: false,
+          color: '#94a3b8',
+          scales: {
+            y: { grid: { color: '#334155' }, beginAtZero: true, title: {display: true, text: 'Water Level (m)', color: '#94a3b8'} },
+            x: { grid: { color: '#334155' } }
+          },
+          plugins: { legend: { labels: { color: '#f8fafc' } } }
         }
       });
-      charts[nodeId] = chart;
-      return chart;
     }
 
-    function pushChartPoint(nodeId, wl, state) {
-      if (!charts[nodeId]) return;
-      const c = charts[nodeId];
-      const lineColor = state === "alert" ? "#A63D2E" : state === "watch" ? "#C97A2E" : "#1E6E7A";
-      c.data.datasets[0].borderColor = lineColor;
-      c.data.datasets[0].backgroundColor = lineColor + "18";
-      c.data.labels.push("");
-      c.data.datasets[0].data.push(wl);
-      if (c.data.labels.length > 25) {
-        c.data.labels.shift();
-        c.data.datasets[0].data.shift();
+    function updateChart(nodeId, data) {
+      if(!mainChart) return;
+      const time = data.timestamp || new Date().toLocaleTimeString("en-GB");
+      
+      // Ensure dataset exists
+      let dataset = mainChart.data.datasets.find(d => d.label === nodeId);
+      if (!dataset) {
+        const hue = Math.floor(Math.random() * 360);
+        dataset = {
+          label: nodeId,
+          data: [],
+          borderColor: `hsl(${hue}, 80%, 60%)`,
+          backgroundColor: `hsl(${hue}, 80%, 60%, 0.1)`,
+          borderWidth: 2,
+          tension: 0.3,
+          fill: true
+        };
+        mainChart.data.datasets.push(dataset);
       }
-      c.update("none");
+
+      // Append data
+      // For simplicity in this demo, if the global labels array is missing this time, add it
+      if(!mainChart.data.labels.includes(time)) {
+        mainChart.data.labels.push(time);
+        if(mainChart.data.labels.length > 20) mainChart.data.labels.shift();
+      }
+
+      // Push point
+      dataset.data.push(data.water_level_m || 0);
+      if(dataset.data.length > 20) dataset.data.shift();
+      
+      mainChart.update('none');
     }
 
-    // ═══════════════════════════════════════════════════════
-    //  NODE CARD RENDERER
-    // ═══════════════════════════════════════════════════════
-    function renderNodeCard(nodeId) {
-      const nd    = nodeData[nodeId] || {};
-      const alert = nd.alert || "OFFLINE";
-      const probs = nd.probs || { NORMAL: 0, WATCH: 0, ALERT: 0 };
-      const state = alert === "ALERT" ? "alert" : alert === "WATCH" ? "watch" : "normal";
+    // ── MQTT ──
+    const client = mqtt.connect(BROKER_WSS, { clientId: CLIENT_ID, clean: true });
+    
+    client.on("connect", () => {
+      document.getElementById("mqttStatus").className = "status-badge connected";
+      document.getElementById("mqttLabel").textContent = "Connected (HiveMQ)";
+      client.subscribe(TOPIC_IN);
+      logEvent("system", "Connected to HiveMQ WSS broker", "INFO");
+    });
 
-      let card = $("card-" + nodeId);
-      const isNew = !card;
-
-      const wl         = nd.water_level_m;
-      const wlGaugePct = Math.min(100, ((wl || 0) / 50) * 100);   // scale 0–50m → 0–100%
-      const wlLabel    = wl != null ? fmt(wl, 1) : "—";
-      const gaugeHTML  = buildGaugeSVG(wlGaugePct, state, wlLabel, "m");
-
-      const badgeClass = state === "alert" ? "badge-alert" : state === "watch" ? "badge-watch" : "badge-normal";
-
-      if (isNew) {
-        card = document.createElement("div");
-        card.id = "card-" + nodeId;
-        card.className = `node-card state-${state}`;
-
-        card.innerHTML = `
-          <div class="card-header state-${state}" id="ch-${nodeId}">
-            <div class="card-node-info">
-              <div class="card-node-name" id="cn-name-${nodeId}">
-                <span class="node-live-dot" id="cn-dot-${nodeId}"></span>
-                ${nd.node_label || nodeId}
-              </div>
-              <div class="card-node-id">${nodeId}</div>
-            </div>
-            <div class="alert-badge ${badgeClass}" id="cn-badge-${nodeId}">${alert}</div>
-          </div>
-
-          <div class="card-body">
-            <div class="card-main-row">
-              <div class="gauge-wrap" id="cn-gauge-${nodeId}">${gaugeHTML}</div>
-              <div class="sensor-grid" id="cn-sensors-${nodeId}"></div>
-            </div>
-
-            <div class="prob-section">
-              <div class="prob-header">
-                <span class="prob-lbl">ML Risk Distribution</span>
-                <span class="prob-vals" id="cn-proba-${nodeId}">N — W — A</span>
-              </div>
-              <div class="prob-bar-track">
-                <div class="pb-normal" id="cn-bn-${nodeId}" style="width:0%"></div>
-                <div class="pb-watch"  id="cn-bw-${nodeId}" style="width:0%"></div>
-                <div class="pb-alert"  id="cn-ba-${nodeId}" style="width:0%"></div>
-              </div>
-            </div>
-
-            <div class="sparkline-label">Water Level Trend</div>
-            <div class="sparkline-wrap">
-              <canvas id="cn-chart-${nodeId}"></canvas>
-            </div>
-          </div>
-
-          <div class="card-footer">
-            <span id="cn-ts-${nodeId}">—</span>
-            <span id="cn-flow-${nodeId}">—</span>
-          </div>
-        `;
-
-        const emptyState = $("emptyState");
-        if (emptyState) emptyState.remove();
-        $("nodeGrid").appendChild(card);
-
-        // init chart after DOM insertion
-        const canvas = $("cn-chart-" + nodeId);
-        getOrCreateChart(nodeId, canvas, state);
-      }
-
-      // Update card state classes
-      card.className = `node-card state-${state}`;
-      const header = $("ch-" + nodeId);
-      if (header) header.className = `card-header state-${state}`;
-
-      // Update badge
-      const badge = $("cn-badge-" + nodeId);
-      if (badge) {
-        badge.textContent = alert;
-        badge.className = `alert-badge ${badgeClass}`;
-      }
-
-      // Update name (in case label changed via REST sync)
-      const nameEl = $("cn-name-" + nodeId);
-      if (nameEl) {
-        nameEl.innerHTML = `<span class="node-live-dot" id="cn-dot-${nodeId}"></span>${nd.node_label || nodeId}`;
-      }
-
-      // Update gauge
-      const gaugeWrap = $("cn-gauge-" + nodeId);
-      if (gaugeWrap) gaugeWrap.innerHTML = buildGaugeSVG(wlGaugePct, state, wlLabel, "m");
-
-      // Sensor cells
-      const wlHigh  = (wl || 0) >= 40;
-      const rnHigh  = (nd.rainfall_24h_mm || 0) >= 100;
-      const rnMed   = (nd.rainfall_24h_mm || 0) >= 60;
-      const grid = $("cn-sensors-" + nodeId);
-      if (grid) {
-        grid.innerHTML = `
-          <div class="sensor-cell">
-            <div class="sensor-lbl">Rainfall 24h</div>
-            <div class="sensor-val ${rnHigh ? "high" : rnMed ? "med" : ""}">${fmt(nd.rainfall_24h_mm)}<span class="sensor-unit">mm</span></div>
-          </div>
-          <div class="sensor-cell">
-            <div class="sensor-lbl">Soil Moisture</div>
-            <div class="sensor-val">${fmt(nd.soil_moisture_pct)}<span class="sensor-unit">%</span></div>
-          </div>
-          <div class="sensor-cell">
-            <div class="sensor-lbl">Flow Velocity</div>
-            <div class="sensor-val">${fmt(nd.flow_velocity_ms, 2)}<span class="sensor-unit">m/s</span></div>
-          </div>
-          <div class="sensor-cell">
-            <div class="sensor-lbl">Turbidity</div>
-            <div class="sensor-val">${fmt(nd.turbidity_ntu, 0)}<span class="sensor-unit">NTU</span></div>
-          </div>
-        `;
-        // Flash individual cells
-        Array.from(grid.children).forEach(c => {
-          c.classList.remove("flash-update");
-          void c.offsetWidth;
-          c.classList.add("flash-update");
-        });
-      }
-
-      // Probability bar
-      const pn = ((probs.NORMAL || 0) * 100).toFixed(0);
-      const pw = ((probs.WATCH  || 0) * 100).toFixed(0);
-      const pa = ((probs.ALERT  || 0) * 100).toFixed(0);
-      const bnEl = $("cn-bn-" + nodeId), bwEl = $("cn-bw-" + nodeId), baEl = $("cn-ba-" + nodeId);
-      if (bnEl) bnEl.style.width = pn + "%";
-      if (bwEl) bwEl.style.width = pw + "%";
-      if (baEl) baEl.style.width = pa + "%";
-      const probaEl = $("cn-proba-" + nodeId);
-      if (probaEl) probaEl.textContent = `${pn}% N · ${pw}% W · ${pa}% A`;
-
-      // Sparkline
-      if (wl !== undefined) pushChartPoint(nodeId, wl, state);
-
-      // Footer
-      const tsEl   = $("cn-ts-"   + nodeId);
-      const flowEl = $("cn-flow-" + nodeId);
-      if (tsEl)   tsEl.textContent   = nd.last_updated ? new Date(nd.last_updated).toLocaleTimeString() : "—";
-      if (flowEl) flowEl.textContent = nd.flow_velocity_ms != null ? `${fmt(nd.flow_velocity_ms, 2)} m/s` : "—";
-    }
-
-    // ═══════════════════════════════════════════════════════
-    //  REST API SYNC with exponential backoff
-    // ═══════════════════════════════════════════════════════
-    let _syncRetryDelay = 5000;
-    let _syncTimer      = null;
-    let _apiOk          = false;
-
-    function setApiBanner(ok, msg) {
-      const banner = $("apiBanner");
-      if (ok) {
-        banner.classList.remove("visible");
-        _apiOk = true;
-      } else {
-        $("apiBannerText").textContent = msg || "⚠ REST API Disconnected — retrying…";
-        banner.classList.add("visible");
-        _apiOk = false;
-      }
-    }
-
-    async function syncFromBackend() {
-      if (!backendApiUrl) return;
-      const btn = $("syncBtn");
-      btn.classList.add("spinning");
-
+    client.on("message", (topic, payload) => {
       try {
-        const res = await fetch(`${backendApiUrl}/api/nodes`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        _syncRetryDelay = 5000;  // reset on success
-        setApiBanner(true);
-
-        if (data.nodes) {
-          data.nodes.forEach(node => {
-            const id = node.node_id;
-            if (!nodeData[id]) nodeData[id] = { node_id: id, node_label: id };
-            Object.assign(nodeData[id], {
-              node_label:        node.node_label || id,
-              water_level_m:     node.water_level_m,
-              rainfall_24h_mm:   node.rainfall_24h_mm,
-              soil_moisture_pct: node.soil_moisture_pct,
-              flow_velocity_ms:  node.flow_velocity_ms,
-              turbidity_ntu:     node.turbidity_ntu,
-              alert:             node.alert_level || "NORMAL",
-              probs:             node.probabilities || {},
-              last_updated:      node.last_updated,
-            });
-            renderNodeCard(id);
-            logEvent(id, node.alert_level || "NORMAL", `REST sync – WL=${fmt(node.water_level_m, 2)}m Rain=${fmt(node.rainfall_24h_mm)}mm`);
-          });
-          updateSummary();
-          updateAlertBanner();
-        }
-      } catch (err) {
-        _syncRetryDelay = Math.min(_syncRetryDelay * 2, 60000);
-        setApiBanner(false, `⚠ REST API Disconnected — retrying in ${Math.round(_syncRetryDelay/1000)}s…`);
-        logEvent("system", "WARN", `API sync failed: ${err.message}. Retry in ${Math.round(_syncRetryDelay/1000)}s.`);
-      } finally {
-        setTimeout(() => btn.classList.remove("spinning"), 400);
+        const msg = JSON.parse(payload.toString());
+        const nodeId = msg.node_id;
+        nodeData[nodeId] = msg;
+        msgCount++;
+        
+        renderNodeCard(nodeId, msg);
+        updateSummary();
+        updateChart(nodeId, msg);
+        logEvent(nodeId, `Telemetry received. ML=${msg.alert_level}`, msg.alert_level);
+      } catch (e) {
+        console.error("MQTT parse error", e);
       }
-    }
+    });
 
-    function apiSyncWithBackoff(delay) {
-      clearTimeout(_syncTimer);
-      _syncTimer = setTimeout(async () => {
-        await syncFromBackend();
-        apiSyncWithBackoff(_syncRetryDelay);
-      }, delay);
-    }
-
-    // ═══════════════════════════════════════════════════════
-    //  DEMO PANEL
-    // ═══════════════════════════════════════════════════════
-    $("demoSubmitBtn").addEventListener("click", async () => {
-      const payload = {
-        node_id:           $("d_node_id").value.trim() || "sim-node-1",
-        water_level_m:     parseFloat($("d_water").value),
-        rainfall_24h_mm:   parseFloat($("d_rain").value),
-        soil_moisture_pct: parseFloat($("d_soil").value),
-        flow_velocity_ms:  parseFloat($("d_flow").value),
-        turbidity_ntu:     parseFloat($("d_turb").value),
+    // ── MANUAL TELEMETRY ──
+    async function submitManualTelemetry() {
+      const nodeId = document.getElementById("manualNodeId").value;
+      const data = {
+        node_id: nodeId,
+        water_level_m: parseFloat(document.getElementById("manualWL").value),
+        rainfall_24h_mm: parseFloat(document.getElementById("manualRain").value),
+        soil_moisture_pct: parseFloat(document.getElementById("manualSoil").value),
+        flow_velocity_ms: parseFloat(document.getElementById("manualVel").value),
+        turbidity_ntu: parseFloat(document.getElementById("manualTurb").value)
       };
-      $("demoResult").textContent = "Sending…";
+
       try {
-        const r = await fetch(`${backendApiUrl}/api/simulate`, {
+        logEvent("system", `Injecting manual data for ${nodeId}...`, "INFO");
+        // We use port 8080 by default for backend, or whatever PRODUCTION_BACKEND_URL is
+        const backendUrl = window.PRODUCTION_BACKEND_URL || "http://localhost:8080";
+        const response = await fetch(`${backendUrl}/api/simulate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(data)
         });
-        const d = await r.json();
-        if (r.ok) {
-          $("demoResult").textContent = `✓ ${d.alert_level} — N:${(d.probabilities?.NORMAL*100).toFixed(0)}% W:${(d.probabilities?.WATCH*100).toFixed(0)}% A:${(d.probabilities?.ALERT*100).toFixed(0)}%`;
-          // Reflect in UI immediately
-          const id = payload.node_id;
-          if (!nodeData[id]) nodeData[id] = { node_id: id, node_label: id };
-          Object.assign(nodeData[id], { ...payload, alert: d.alert_level, probs: d.probabilities || {}, last_updated: new Date().toISOString() });
-          renderNodeCard(id);
-          updateSummary();
-          updateAlertBanner();
-          logEvent(id, d.alert_level, `Simulated – ${d.alert_level}`);
-        } else {
-          $("demoResult").textContent = `✗ Error: ${d.error}`;
+        
+        if (!response.ok) {
+          const err = await response.json();
+          logEvent("system", `Inject error: ${err.error || response.statusText}`, "ALERT");
+          return;
         }
+        const result = await response.json();
+        logEvent("system", `Manual inject success. ML=${result.alert_level}`, result.alert_level);
+        
+        // Wait for MQTT to propagate, but we could also manually fetch /api/nodes
       } catch (e) {
-        $("demoResult").textContent = `✗ Network error: ${e.message}`;
+        console.error(e);
+        logEvent("system", `Inject failed: ${e.message}`, "ALERT");
       }
-    });
-
-    // ═══════════════════════════════════════════════════════
-    //  MQTT Connection
-    // ═══════════════════════════════════════════════════════
-    function setMqttStatus(state, text) {
-      const pill = $("mqttStatus");
-      pill.className = `status-pill ${state}`;
-      $("mqttLabel").textContent = text;
     }
 
-    const mqttClient = mqtt.connect(BROKER_WSS, {
-      clientId: CLIENT_ID,
-      clean: true,
-      reconnectPeriod: 3000,
-      connectTimeout: 15000,
-    });
-
-    mqttClient.on("connect", () => {
-      setMqttStatus("connected", "Live");
-      mqttClient.subscribe([TOPIC_SENSOR_ALL, TOPIC_ALERT_ALL]);
-      logEvent("system", "INFO", `MQTT connected → ${BROKER_WSS}`);
-      apiSyncWithBackoff(0);   // immediate sync on connect
-    });
-
-    mqttClient.on("reconnect", () => {
-      setMqttStatus("connecting", "Reconnecting…");
-    });
-
-    mqttClient.on("offline", () => {
-      setMqttStatus("connecting", "Offline");
-    });
-
-    mqttClient.on("error", err => {
-      setMqttStatus("error", "Error");
-      logEvent("system", "WARN", `MQTT error: ${err.message}`);
-    });
-
-    mqttClient.on("message", (topic, payload) => {
-      msgCount++;
-      try {
-        const data  = JSON.parse(payload.toString());
-        const parts = topic.split("/");
-        const id    = parts[2] || data.node_id;
-
-        if (!nodeData[id]) nodeData[id] = { node_id: id, node_label: id, alert: "NORMAL", probs: {} };
-
-        if (parts[1] === "sensor") {
-          Object.assign(nodeData[id], data);
-        } else if (parts[1] === "alert") {
-          nodeData[id].alert = data.alert_level || "NORMAL";
-          nodeData[id].probs = data.probabilities || {};
-          nodeData[id].last_updated = new Date().toISOString();
-        }
-
-        renderNodeCard(id);
-        updateSummary();
-        updateAlertBanner();
-
-        if (parts[1] === "alert") {
-          logEvent(id, data.alert_level || "NORMAL",
-            `MQTT alert → ${data.alert_level} P(A)=${((data.probabilities?.ALERT||0)*100).toFixed(0)}%`);
-        }
-      } catch (e) {
-        logEvent("system", "WARN", "Invalid MQTT payload — parse error");
+    // ── AUTO SIMULATION ──
+    let simInterval = null;
+    const SIM_NODES = [
+      { id: "node-alpha", wl: 15, rain: 5, t: 0 },
+      { id: "node-beta",  wl: 8,  rain: 2, t: 2 },
+      { id: "node-gamma", wl: 35, rain: 25, t: 4 },
+      { id: "node-delta", wl: 42, rain: 40, t: 6 },
+    ];
+    
+    document.getElementById("autoSimBtn").addEventListener("click", (e) => {
+      const btn = e.currentTarget;
+      if (simInterval) {
+        clearInterval(simInterval);
+        simInterval = null;
+        btn.classList.remove("active");
+        btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Auto-Simulation`;
+        return;
       }
+      
+      btn.classList.add("active");
+      btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop Simulation`;
+      
+      simInterval = setInterval(() => {
+        const n = SIM_NODES[Math.floor(Math.random() * SIM_NODES.length)];
+        n.t += 0.5;
+        // Sine wave for realistic varying data
+        const wl = n.wl + (Math.sin(n.t) * 5);
+        const rain = n.rain + (Math.cos(n.t) * 3);
+        
+        const payload = {
+          node_id: n.id,
+          water_level_m: Math.max(0, wl),
+          rainfall_24h_mm: Math.max(0, rain),
+          soil_moisture_pct: 70 + (Math.sin(n.t)*10),
+          flow_velocity_ms: 1 + (wl/10),
+          turbidity_ntu: 300 + (rain*10)
+        };
+        
+        fetch('http://localhost:8080/api/simulate', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        }).catch(err => console.error("Sim error:", err));
+      }, 4000);
     });
 
-    // Start API polling loop even before MQTT connects
-    apiSyncWithBackoff(1500);
+    // Init
+    initChart();
   </script>
 </body>
 </html>

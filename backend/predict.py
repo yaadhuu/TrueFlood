@@ -41,9 +41,10 @@ _model        = _saved["model"]
 _FEATURE_COLS = _saved["features"]
 _ALERT_LABELS = {0: "NORMAL", 1: "WATCH", 2: "ALERT"}
 
-# ── Rainfall rolling history (thread-safe) ────────────────────────
-_rain_lock: threading.Lock = threading.Lock()
+# ── Stateful history (thread-safe) ──────────────────────────────
+_state_lock: threading.Lock = threading.Lock()
 _rain_history: dict[str, deque] = {}
+_prev_reading: dict[str, dict] = {}
 
 
 # ── Public API ────────────────────────────────────────────────────
@@ -58,34 +59,46 @@ def predict_flood(
 ) -> dict:
     """
     Run ML inference for a single sensor reading.
-
-    Returns:
-        {
-          "alert_level":   "NORMAL" | "WATCH" | "ALERT",
-          "class_id":      int,
-          "probabilities": {"NORMAL": float, "WATCH": float, "ALERT": float}
-        }
     """
-    with _rain_lock:
+    discharge = water_level_m * flow_velocity_ms
+    soil_saturated = int(soil_moisture_pct > 85)
+
+    with _state_lock:
         if node_id not in _rain_history:
             _rain_history[node_id] = deque(maxlen=3)
         _rain_history[node_id].append(rainfall_24h_mm)
         rainfall_72h = sum(_rain_history[node_id])
 
-    discharge          = water_level_m * flow_velocity_ms
-    soil_saturated     = int(soil_moisture_pct > 85)
+        prev = _prev_reading.get(node_id, {})
+        
+        water_level_lag1 = prev.get("water_level_m", water_level_m)
+        rainfall_lag1 = prev.get("rainfall_24h_mm", rainfall_24h_mm)
+        discharge_lag1 = prev.get("discharge", discharge)
+        turbidity_lag1 = prev.get("turbidity_ntu", turbidity_ntu)
+
+        water_level_change = water_level_m - water_level_lag1
+        turbidity_spike = turbidity_ntu - turbidity_lag1
+
+        # Save current for next time
+        _prev_reading[node_id] = {
+            "water_level_m": water_level_m,
+            "rainfall_24h_mm": rainfall_24h_mm,
+            "discharge": discharge,
+            "turbidity_ntu": turbidity_ntu
+        }
 
     row = pd.DataFrame([[
         water_level_m, rainfall_24h_mm, soil_moisture_pct,
         flow_velocity_ms, turbidity_ntu, discharge,
         rainfall_72h,
-        0.0,            # water_level_change  (no prior reading at call time)
-        0.0,            # turbidity_spike
+        water_level_change,
+        turbidity_spike,
         soil_saturated,
-        water_level_m,  # water_level_lag1
-        rainfall_24h_mm,# rainfall_lag1
-        discharge,      # discharge_lag1
+        water_level_lag1,
+        rainfall_lag1,
+        discharge_lag1,
     ]], columns=_FEATURE_COLS)
+
 
     class_id = int(_model.predict(row)[0])
     raw_probs = _model.predict_proba(row)[0]

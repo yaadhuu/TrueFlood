@@ -50,6 +50,7 @@ load_dotenv(os.path.join(_HERE, ".env"))
 
 sys.path.insert(0, _HERE)
 from predict import predict_flood  # noqa: E402
+import db  # noqa: E402
 
 # ── Logging ───────────────────────────────────────────────────────
 logging.basicConfig(
@@ -91,9 +92,7 @@ ALERT_COOLDOWN_SEC = 300
 # ── Thread-safe state store ───────────────────────────────────────
 _state_lock: threading.RLock = threading.RLock()
 
-node_states:      dict = {}   # node_id -> latest merged state dict
 node_alert_times: dict = {}   # node_id -> unix timestamp of last WhatsApp send
-node_history:     dict = {}   # node_id -> list of last MAX_HISTORY points
 MAX_HISTORY = 20
 
 # Alert attempt log (last 50, used by GET /api/alerts/log)
@@ -144,9 +143,8 @@ def _validate_sensor_payload(data: dict) -> tuple[dict, str | None]:
 
 @app.route("/api/nodes", methods=["GET"])
 def api_nodes():
-    with _state_lock:
-        snapshot = list(node_states.values())
-        count    = len(node_states)
+    snapshot = db.get_all_nodes()
+    count    = len(snapshot)
     return jsonify({
         "nodes":       snapshot,
         "node_count":  count,
@@ -156,27 +154,24 @@ def api_nodes():
 
 @app.route("/api/nodes/<node_id>", methods=["GET"])
 def api_node(node_id):
-    with _state_lock:
-        if node_id not in node_states:
-            return jsonify({"error": "node not found"}), 404
-        current = dict(node_states[node_id])
-        history = list(node_history.get(node_id, []))
+    current = db.get_node(node_id)
+    if not current:
+        return jsonify({"error": "node not found"}), 404
+    history = db.get_node_history(node_id, limit=MAX_HISTORY)
     return jsonify({"current": current, "history": history})
 
 
 @app.route("/api/history/<node_id>", methods=["GET"])
 def api_history(node_id):
-    with _state_lock:
-        if node_id not in node_history:
-            return jsonify({"error": "node not found"}), 404
-        history = list(node_history[node_id])
+    history = db.get_node_history(node_id, limit=MAX_HISTORY)
+    if not history:
+        return jsonify({"error": "node not found"}), 404
     return jsonify({"node_id": node_id, "history": history})
 
 
 @app.route("/api/health", methods=["GET"])
 def api_health():
-    with _state_lock:
-        count = len(node_states)
+    count = len(db.get_all_nodes())
     return jsonify({
         "status":         "ok",
         "nodes_online":   count,
@@ -237,28 +232,18 @@ def api_simulate():
     data = {**floats, "node_id": node_id, "node_label": node_id.replace("-", " ").title()}
     state = {**data, "alert_level": alert, "probabilities": probs, "last_updated": ts}
 
-    # Update shared state (same path as live MQTT readings)
-    with _state_lock:
-        node_states[node_id] = state
-        bucket = node_history.setdefault(node_id, [])
-        bucket.append({
-            "ts":               ts,
-            "water_level_m":    floats.get("water_level_m"),
-            "rainfall_24h_mm":  floats.get("rainfall_24h_mm"),
-            "flow_velocity_ms": floats.get("flow_velocity_ms"),
-            "alert_level":      alert,
-        })
-        if len(bucket) > MAX_HISTORY:
-            bucket.pop(0)
+    # Update SQLite database
+    db.update_node_state(node_id, state)
+    db.insert_telemetry(node_id, data, alert)
 
     log.info("[simulate][%s] %s P=%s", node_id, alert, probs)
 
-    # Fire WhatsApp if alert (bypass cooldown for simulation — force=True)
+    # Fire WhatsApp on ALERT — normal 300s per-node cooldown applies.
+    # force=True is ONLY used by /api/test-alert (direct Twilio test).
     if alert == "ALERT":
         threading.Thread(
             target=send_whatsapp,
             args=(node_id, alert, data),
-            kwargs={"force": True},
             daemon=True,
         ).start()
 
@@ -461,19 +446,9 @@ def on_message(client, userdata, msg):
     ts    = datetime.now(timezone.utc).isoformat()
     state = {**data, "alert_level": alert, "probabilities": probs, "last_updated": ts}
 
-    # Atomic update of shared state
-    with _state_lock:
-        node_states[node_id] = state
-        bucket = node_history.setdefault(node_id, [])
-        bucket.append({
-            "ts":               ts,
-            "water_level_m":    data.get("water_level_m"),
-            "rainfall_24h_mm":  data.get("rainfall_24h_mm"),
-            "flow_velocity_ms": data.get("flow_velocity_ms"),
-            "alert_level":      alert,
-        })
-        if len(bucket) > MAX_HISTORY:
-            bucket.pop(0)
+    # Atomic update of shared state via SQLite
+    db.update_node_state(node_id, state)
+    db.insert_telemetry(node_id, data, alert)
 
     # Publish alert result back to broker (outside lock – paho is thread-safe)
     out_topic = TOPIC_OUT_FMT.format(node_id=node_id)
@@ -532,6 +507,7 @@ def init_mqtt() -> None:
 
 
 # Bootstrap MQTT when the module is imported by Gunicorn
+db.init_db()
 init_mqtt()
 
 
