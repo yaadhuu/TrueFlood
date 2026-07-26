@@ -198,16 +198,23 @@
     /* NODE GRID (LIVE TAB) */
     .node-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
       gap: 16px;
     }
     .node-card {
       background: var(--bg-card);
       border: 1px solid var(--border-color);
+      border-top: 3px solid var(--border-color);
       box-shadow: var(--shadow-md);
+      transition: border-top-color 0.3s ease;
     }
+    /* severity top-border — scannable at a glance */
+    .node-card.sev-normal { border-top-color: var(--status-normal); }
+    .node-card.sev-watch  { border-top-color: var(--status-watch); }
+    .node-card.sev-alert  { border-top-color: var(--status-alert); }
+
     .card-header {
-      padding: 12px 16px;
+      padding: 10px 14px;
       border-bottom: 1px solid var(--border-color);
       display: flex;
       justify-content: space-between;
@@ -215,7 +222,7 @@
       background: #F5F5F5;
     }
     .node-title {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 700;
       text-transform: uppercase;
       display: flex;
@@ -224,14 +231,14 @@
     }
     .node-id-sub {
       font-family: var(--font-mono);
-      font-size: 11px;
+      font-size: 10px;
       color: var(--text-muted);
     }
     .alert-pill {
       font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
-      padding: 4px 8px;
+      padding: 3px 8px;
       border: 2px solid;
       background: #FFFFFF;
     }
@@ -239,7 +246,7 @@
     .pill-watch { color: var(--status-watch); border-color: var(--status-watch); }
     .pill-alert { color: var(--status-alert); border-color: var(--status-alert); }
 
-    .card-body { padding: 16px; }
+    .card-body { padding: 12px 14px; }
     
     .sensor-grid {
       display: grid;
@@ -247,85 +254,85 @@
       gap: 1px;
       background: var(--border-color);
       border: 1px solid var(--border-color);
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }
     .sensor-item {
       background: #FFFFFF;
-      padding: 12px;
+      padding: 10px 12px;
     }
     .sensor-lbl {
-      font-size: 11px;
+      font-size: 10px;
       color: var(--text-muted);
-      margin-bottom: 4px;
+      margin-bottom: 3px;
       text-transform: uppercase;
       font-weight: 700;
+      letter-spacing: 0.04em;
     }
     .sensor-val {
       font-family: var(--font-mono);
-      font-size: 20px;
+      font-size: 22px;
       font-weight: 700;
-      color: var(--text-main);
+      color: #111111;
     }
-    .sensor-unit { font-size: 12px; color: var(--text-muted); font-family: var(--font-ui); margin-left: 4px;}
+    .sensor-unit { font-size: 12px; color: #888; font-family: var(--font-ui); margin-left: 3px;}
 
     /* ML Probabilities Bar Chart */
     .ml-section {
       background: #F9F9F9;
       border: 1px solid var(--border-color);
-      padding: 12px;
+      padding: 10px 12px;
     }
     .ml-title {
-      font-size: 11px;
+      font-size: 10px;
       color: var(--text-main);
-      margin-bottom: 8px;
+      margin-bottom: 7px;
       font-weight: 700;
       text-transform: uppercase;
+      letter-spacing: 0.05em;
       border-bottom: 1px solid var(--border-light);
       padding-bottom: 4px;
     }
-    .ml-bars {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .ml-bar-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 11px;
-      font-family: var(--font-mono);
-    }
+    .ml-bars { display: flex; flex-direction: column; gap: 4px; }
+    .ml-bar-row { display: flex; align-items: center; gap: 8px; font-size: 11px; font-family: var(--font-mono); }
     .ml-lbl { width: 55px; color: var(--text-muted); font-weight: 700; }
-    .ml-track {
-      flex: 1;
-      height: 8px;
-      background: #E0E0E0;
-      border: 1px solid #BDBDBD;
-    }
-    .ml-fill { height: 100%; transition: width 0.3s ease; }
+    .ml-track { flex: 1; height: 8px; background: #E0E0E0; border: 1px solid #BDBDBD; }
+    .ml-fill { height: 100%; transition: width 0.4s ease; }
     .ml-val { width: 35px; text-align: right; color: var(--text-main); font-weight: 700;}
-    
     .fill-n { background: var(--status-normal); }
     .fill-w { background: var(--status-watch); }
     .fill-a { background: var(--status-alert); }
 
     .card-footer {
       border-top: 1px solid var(--border-color);
-      padding: 8px 16px;
+      padding: 6px 14px;
       font-family: var(--font-mono);
       font-size: 11px;
       color: var(--text-muted);
       display: flex;
       justify-content: space-between;
+      align-items: center;
       background: #F5F5F5;
     }
+    .alert-send-btn {
+      background: var(--status-normal);
+      color: #fff;
+      border: none;
+      padding: 3px 8px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .alert-send-btn:hover { filter: brightness(0.88); }
 
     /* TOPOLOGY TAB */
     .topology-container {
       display: grid;
-      grid-template-columns: 1fr 350px;
+      grid-template-columns: 1fr 420px;
       gap: 16px;
-      height: 600px;
     }
     .blueprint-panel {
       background: var(--bg-card);
@@ -355,6 +362,7 @@
       justify-content: center;
       padding: 16px;
       overflow: hidden;
+      min-height: 340px;
     }
     .wokwi-panel {
       background: var(--bg-card);
@@ -363,23 +371,49 @@
       display: flex;
       flex-direction: column;
     }
-    
-    /* ANALYTICS TAB */
-    .analytics-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 16px;
+    /* Wokwi node sub-tabs */
+    .wokwi-tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
+    .wokwi-tab-btn {
+      background: #E3EAF4;
+      border: 1px solid #B0BEC5;
+      color: var(--bg-header);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 12px;
+      cursor: pointer;
+      text-transform: uppercase;
     }
-    .chart-card {
-      background: var(--bg-card);
+    .wokwi-tab-btn.active { background: var(--bg-header); color: #FFF; border-color: var(--bg-header); }
+    .wokwi-node-panel { display: none; }
+    .wokwi-node-panel.active { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+    .wokwi-url-input {
+      width: 100%;
+      padding: 6px 8px;
       border: 1px solid var(--border-color);
-      padding: 16px;
-      height: 450px;
+      font-family: var(--font-mono);
+      font-size: 12px;
     }
+    .wokwi-placeholder {
+      flex: 1;
+      background: #F0F4F8;
+      border: 2px dashed #B0BEC5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+      min-height: 300px;
+    }
+
+    /* ANALYTICS TAB */
+    .analytics-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .chart-card { background: var(--bg-card); border: 1px solid var(--border-color); padding: 16px; height: 450px; }
     
     /* EVENT LOG */
     .log-panel {
-      margin-top: 24px;
+      margin-top: 0;
       background: var(--bg-card);
       border: 1px solid var(--border-color);
     }
@@ -395,18 +429,32 @@
       color: var(--text-main);
     }
     .log-body {
-      height: 150px;
+      height: 230px;
       overflow-y: auto;
       padding: 8px 16px;
       font-family: var(--font-mono);
       font-size: 12px;
     }
-    .log-row { padding: 4px 0; display: flex; gap: 16px; border-bottom: 1px solid #EEEEEE; }
+    .log-row { padding: 4px 0; display: flex; gap: 16px; border-bottom: 1px solid #EEE; }
     .log-time { color: var(--text-muted); width: 80px; }
-    .log-node { color: var(--accent); width: 100px; font-weight: bold;}
+    .log-node { color: var(--accent); width: 100px; font-weight: bold; }
     .log-msg { flex: 1; color: var(--text-main); }
-    .log-msg.log-alert { color: var(--status-alert); font-weight: bold;}
-    .log-msg.log-watch { color: var(--status-watch); font-weight: bold;}
+    .log-msg.log-alert { color: var(--status-alert); font-weight: bold; }
+    .log-msg.log-watch { color: var(--status-watch); font-weight: bold; }
+
+    /* CONTROL PANELS ROW */
+    .control-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 24px;
+    }
+    @media (max-width: 768px) {
+      .control-row { grid-template-columns: 1fr; }
+      .topology-container { grid-template-columns: 1fr; }
+      .node-grid { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+    }
 
     /* SIMULATION PANEL */
     .sim-panel {
@@ -415,26 +463,58 @@
       border-left: 6px solid var(--accent);
       padding: 12px 16px;
       margin-bottom: 24px;
+    }
+    .sim-controls {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
+      align-items: flex-end;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .sim-input-group { display: flex; flex-direction: column; gap: 3px; }
+    .sim-input-group label { font-size: 11px; font-weight: 700; color: var(--accent-hover); text-transform: uppercase; }
+    .sim-input-group input {
+      padding: 6px 8px;
+      border: 1px solid var(--accent);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      width: 72px;
     }
     .sim-btn {
       background: var(--accent);
       color: #FFFFFF;
       border: 1px solid var(--accent-hover);
-      padding: 8px 16px;
+      padding: 8px 14px;
       font-weight: 700;
       font-family: var(--font-ui);
+      font-size: 13px;
       text-transform: uppercase;
       cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
     }
     .sim-btn:hover { background: var(--accent-hover); }
     .sim-btn.active { background: var(--status-alert); border-color: #B71C1C; }
     .sim-btn.active:hover { background: #B71C1C; }
+    .sim-btn.green { background: var(--status-normal); border-color: #1B5E20; }
+    .sim-btn.green:hover { background: #1B5E20; }
+
+    /* TOAST */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: #212121; color: #fff;
+      padding: 12px 20px; border-radius: 0;
+      font-size: 13px; font-family: var(--font-ui);
+      z-index: 9999; opacity: 0;
+      transition: opacity 0.3s ease;
+      max-width: 340px; border-left: 4px solid var(--accent);
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+    #toast.toast-ok { border-left-color: var(--status-normal); }
+    #toast.toast-err { border-left-color: var(--status-alert); }
+    #toast.toast-warn { border-left-color: var(--status-watch); }
   </style>
 </head>
 <body>
@@ -474,19 +554,31 @@
   </header>
 
   <main>
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast"></div>
+
     <!-- SIMULATION OVERRIDE -->
-    <div id="demoPanel" class="sim-panel" style="display: none;">
-      <div>
-        <div style="font-weight: 600; margin-bottom: 4px; display:flex; align-items:center; gap:8px;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          Developer Simulation Mode
-        </div>
-        <div style="font-size: 12px; color: var(--text-muted);">Simulates 5 active sensor nodes sending data every 4 seconds. ML predictions update in real-time.</div>
+    <div id="demoPanel" class="sim-panel" style="display:none;">
+      <div style="display:flex; align-items:center; gap:8px; font-weight:700; margin-bottom:6px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Developer Simulation Mode
       </div>
-      <button id="autoSimBtn" class="sim-btn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        Start Auto-Simulation
-      </button>
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Generate N random sensor nodes with realistic randomized values. ML predictions update in real-time as each node drifts over time.</div>
+      <div class="sim-controls">
+        <div class="sim-input-group">
+          <label for="nodeCount">Number of Nodes</label>
+          <input type="number" id="nodeCount" min="1" max="20" value="6">
+        </div>
+        <button id="generateNodesBtn" class="sim-btn green" onclick="generateRandomNodes()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Generate Random Nodes
+        </button>
+        <button id="autoSimBtn" class="sim-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Start Auto-Simulation
+        </button>
+      </div>
+      <div id="simStatus" style="font-size:11px; color:var(--accent-hover); margin-top:8px; font-family:var(--font-mono);"></div>
     </div>
 
     <!-- TAB: LIVE TELEMETRY -->
@@ -513,9 +605,10 @@
       <div class="node-grid" id="nodeGrid">
         <!-- JS populates cards here -->
       </div>
-      
-      <div style="display: grid; grid-template-columns: 1fr 350px; gap: 24px; margin-top: 24px;">
-        <div class="log-panel" style="margin-top: 0;">
+
+      <div class="control-row">
+        <!-- System Event Log -->
+        <div class="log-panel">
           <div class="log-header">
             <div>System Event Log</div>
             <button onclick="clearLog()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;">Clear</button>
@@ -529,42 +622,72 @@
           </div>
         </div>
 
-        <div class="log-panel" style="margin-top: 0; background: #FFF3E0; border-color: #FF9800;">
-          <div class="log-header" style="background: #FFE0B2; color: #E65100;">
-            <div>Manual Telemetry Inject</div>
+        <!-- Right column: Manual Inject + Alert Delivery stacked -->
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <!-- Manual Telemetry Inject -->
+          <div class="log-panel" style="background:#FFF3E0; border-color:#FF9800;">
+            <div class="log-header" style="background:#FFE0B2; color:#E65100;">
+              <div>Manual Telemetry Inject</div>
+            </div>
+            <div style="padding:10px; font-size:13px;">
+              <div style="margin-bottom:6px;">
+                <label style="display:block; font-weight:600; color:#E65100; margin-bottom:2px; font-size:11px;">NODE ID</label>
+                <input type="text" id="manualNodeId" value="manual-1" style="width:100%; padding:5px; border:1px solid #FFCC80; font-family:var(--font-mono);">
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;">
+                <div>
+                  <label style="display:block; font-weight:600; color:#E65100; margin-bottom:2px; font-size:10px;">WATER LVL (m)</label>
+                  <input type="number" id="manualWL" value="30.0" style="width:100%; padding:5px; border:1px solid #FFCC80;">
+                </div>
+                <div>
+                  <label style="display:block; font-weight:600; color:#E65100; margin-bottom:2px; font-size:10px;">RAIN (mm)</label>
+                  <input type="number" id="manualRain" value="50.0" style="width:100%; padding:5px; border:1px solid #FFCC80;">
+                </div>
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:10px;">
+                <div>
+                  <label style="display:block; font-weight:600; color:#E65100; margin-bottom:2px; font-size:10px;">SOIL %</label>
+                  <input type="number" id="manualSoil" value="85" style="width:100%; padding:5px; border:1px solid #FFCC80;">
+                </div>
+                <div>
+                  <label style="display:block; font-weight:600; color:#E65100; margin-bottom:2px; font-size:10px;">VEL (m/s)</label>
+                  <input type="number" id="manualVel" value="4.0" style="width:100%; padding:5px; border:1px solid #FFCC80;">
+                </div>
+                <div>
+                  <label style="display:block; font-weight:600; color:#E65100; margin-bottom:2px; font-size:10px;">TURB (NTU)</label>
+                  <input type="number" id="manualTurb" value="600" style="width:100%; padding:5px; border:1px solid #FFCC80;">
+                </div>
+              </div>
+              <button onclick="submitManualTelemetry()" style="width:100%; background:#E65100; color:white; border:none; padding:8px; font-weight:700; cursor:pointer; text-transform:uppercase;">
+                Inject &amp; Trigger ML
+              </button>
+            </div>
           </div>
-          <div style="padding: 12px; font-size: 13px;">
-            <div style="margin-bottom: 8px;">
-              <label style="display:block; font-weight: 600; color: #E65100; margin-bottom: 2px;">Node ID</label>
-              <input type="text" id="manualNodeId" value="manual-1" style="width:100%; padding: 4px; border: 1px solid #FFCC80; border-radius: 4px;">
+
+          <!-- Alert Delivery -->
+          <div class="log-panel" style="background:#F1F8E9; border-color:#4CAF50;">
+            <div class="log-header" style="background:#DCEDC8; color:#2E7D32;">
+              <div>&#x1F514; Alert Delivery</div>
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
-              <div>
-                <label style="display:block; font-weight: 600; color: #E65100; margin-bottom: 2px;">Water Lvl (m)</label>
-                <input type="number" id="manualWL" value="30.0" style="width:100%; padding: 4px; border: 1px solid #FFCC80; border-radius: 4px;">
+            <div style="padding:10px; font-size:13px;">
+              <div style="margin-bottom:6px;">
+                <label style="display:block; font-weight:600; color:#2E7D32; margin-bottom:2px; font-size:11px;">WHATSAPP NUMBER</label>
+                <input type="tel" id="alertPhone" placeholder="+919876543210"
+                  style="width:100%; padding:5px; border:1px solid #A5D6A7; font-family:var(--font-mono);"
+                  oninput="localStorage.setItem('tf_alert_phone',this.value)">
+                <div style="font-size:10px; color:#558B2F; margin-top:3px;">Send 'join &lt;code&gt;' to +1 415 523 8886 on WhatsApp first (Twilio sandbox).</div>
               </div>
-              <div>
-                <label style="display:block; font-weight: 600; color: #E65100; margin-bottom: 2px;">Rain (mm)</label>
-                <input type="number" id="manualRain" value="50.0" style="width:100%; padding: 4px; border: 1px solid #FFCC80; border-radius: 4px;">
+              <div style="margin-bottom:10px;">
+                <label style="display:block; font-weight:600; color:#2E7D32; margin-bottom:2px; font-size:11px;">SELECT NODE</label>
+                <select id="alertNodeSelect" style="width:100%; padding:5px; border:1px solid #A5D6A7; font-family:var(--font-mono);">
+                  <option value="">-- no nodes yet --</option>
+                </select>
               </div>
+              <button onclick="sendAlertNow()" style="width:100%; background:#2E7D32; color:white; border:none; padding:8px; font-weight:700; cursor:pointer; text-transform:uppercase; display:flex; align-items:center; justify-content:center; gap:6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.56 3.44 2 2 0 0 1 3.53 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.69a16 16 0 0 0 6.09 6.09l.86-.87a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92z"/></svg>
+                Send Alert Now
+              </button>
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px;">
-              <div>
-                <label style="display:block; font-weight: 600; color: #E65100; margin-bottom: 2px;">Soil %</label>
-                <input type="number" id="manualSoil" value="85" style="width:100%; padding: 4px; border: 1px solid #FFCC80; border-radius: 4px;">
-              </div>
-              <div>
-                <label style="display:block; font-weight: 600; color: #E65100; margin-bottom: 2px;">Vel (m/s)</label>
-                <input type="number" id="manualVel" value="4.0" style="width:100%; padding: 4px; border: 1px solid #FFCC80; border-radius: 4px;">
-              </div>
-              <div>
-                <label style="display:block; font-weight: 600; color: #E65100; margin-bottom: 2px;">Turb (NTU)</label>
-                <input type="number" id="manualTurb" value="600" style="width:100%; padding: 4px; border: 1px solid #FFCC80; border-radius: 4px;">
-              </div>
-            </div>
-            <button onclick="submitManualTelemetry()" style="width: 100%; background: #E65100; color: white; border: none; padding: 8px; font-weight: 700; cursor: pointer; text-transform: uppercase;">
-              Inject & Trigger ML
-            </button>
           </div>
         </div>
       </div>
@@ -635,9 +758,20 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--status-watch)" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
             Hardware Simulator
           </div>
-          <div style="flex:1; background:var(--bg-dark); border:1px solid var(--border-color); border-radius:8px; overflow:hidden;">
-            <iframe src="https://wokwi.com/projects/322577683855704658?embed=1" width="100%" height="100%" frameborder="0" style="min-height: 500px;"></iframe>
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:10px; line-height:1.5;">
+            Each tab is an independent Wokwi simulation publishing to the same MQTT broker under a different NODE_ID — run them in separate browser tabs simultaneously and they'll all appear on the Live tab.
           </div>
+          <div class="wokwi-tabs">
+            <button class="wokwi-tab-btn active" onclick="switchWokwiTab(1,this)">Node 1</button>
+            <button class="wokwi-tab-btn" onclick="switchWokwiTab(2,this)">Node 2</button>
+            <button class="wokwi-tab-btn" onclick="switchWokwiTab(3,this)">Node 3</button>
+            <button class="wokwi-tab-btn" onclick="switchWokwiTab(4,this)">Node 4</button>
+          </div>
+          <!-- Node panels -->
+          <div id="wokwi-n1" class="wokwi-node-panel active"></div>
+          <div id="wokwi-n2" class="wokwi-node-panel"></div>
+          <div id="wokwi-n3" class="wokwi-node-panel"></div>
+          <div id="wokwi-n4" class="wokwi-node-panel"></div>
         </div>
       </div>
     </div>
@@ -663,13 +797,26 @@
     const BROKER_WSS = "wss://broker.hivemq.com:8884/mqtt";
     const CLIENT_ID  = "dashboard-pro-" + Math.random().toString(16).slice(2, 10);
     const TOPIC_IN   = "flood/alert/+";
+    const BACKEND_URL = window.PRODUCTION_BACKEND_URL || (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'http://localhost:8080' : 'https://floodsense-backend.onrender.com');
 
     const nodeData = {};
     let msgCount = 0;
     let mainChart;
+    let generatedNodes = []; // current N-node set for auto-sim
+    let simInterval = null;
 
     const DEMO_MODE = new URLSearchParams(location.search).get("demo") === "1";
-    if (DEMO_MODE) document.getElementById("demoPanel").style.display = "flex";
+    if (DEMO_MODE) document.getElementById("demoPanel").style.display = "block";
+
+    // ── TOAST ──
+    let _toastTimer = null;
+    function showToast(msg, type = 'ok') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = `show toast-${type}`;
+      clearTimeout(_toastTimer);
+      _toastTimer = setTimeout(() => { t.className = ''; }, 4000);
+    }
 
     // ── TAB SWITCHING ──
     function switchTab(tabId) {
@@ -681,35 +828,47 @@
 
     // ── LOGGER ──
     function logEvent(node, msg, level) {
-      const log = document.getElementById("eventLog");
+      const logEl = document.getElementById("eventLog");
       const row = document.createElement("div");
       row.className = "log-row";
       const time = new Date().toLocaleTimeString("en-GB");
       let cls = "";
-      if(level==="ALERT") cls="log-alert";
-      else if(level==="WATCH") cls="log-watch";
-      
-      row.innerHTML = `
-        <span class="log-time">${time}</span>
-        <span class="log-node">${node}</span>
-        <span class="log-msg ${cls}">${msg}</span>
-      `;
-      log.prepend(row);
-      if(log.children.length > 50) log.removeChild(log.lastChild);
+      if (level === "ALERT") cls = "log-alert";
+      else if (level === "WATCH") cls = "log-watch";
+      row.innerHTML = `<span class="log-time">${time}</span><span class="log-node">${node}</span><span class="log-msg ${cls}">${msg}</span>`;
+      logEl.prepend(row);
+      if (logEl.children.length > 50) logEl.removeChild(logEl.lastChild);
     }
     function clearLog() { document.getElementById("eventLog").innerHTML = ""; }
+
+    // ── NODE SELECT (Alert Delivery) ──
+    function refreshAlertNodeSelect() {
+      const sel = document.getElementById('alertNodeSelect');
+      const prev = sel.value;
+      sel.innerHTML = Object.keys(nodeData).length
+        ? Object.keys(nodeData).map(id => `<option value="${id}">${id}</option>`).join('')
+        : '<option value="">-- no nodes yet --</option>';
+      if (prev && nodeData[prev]) sel.value = prev;
+    }
+
+    // ── SEND ALERT FROM CARD ──
+    function prefillAndSendAlert(nodeId) {
+      const sel = document.getElementById('alertNodeSelect');
+      sel.value = nodeId;
+      sendAlertNow();
+    }
 
     // ── RENDERER ──
     function renderNodeCard(nodeId, data) {
       const grid = document.getElementById("nodeGrid");
       let card = document.getElementById("card-" + nodeId);
-      
-      const prob = data.probabilities || {NORMAL:1, WATCH:0, ALERT:0};
+
+      const prob = data.probabilities || { NORMAL: 1, WATCH: 0, ALERT: 0 };
       const alertLvl = data.alert_level || "NORMAL";
       const isAlert = alertLvl === "ALERT";
       const isWatch = alertLvl === "WATCH";
       const pillCls = isAlert ? "pill-alert" : isWatch ? "pill-watch" : "pill-normal";
-      const borderCls = isAlert ? "var(--status-alert)" : isWatch ? "var(--status-watch)" : "var(--border-color)";
+      const sevCls  = isAlert ? "sev-alert"  : isWatch ? "sev-watch"  : "sev-normal";
 
       if (!card) {
         card = document.createElement("div");
@@ -717,13 +876,12 @@
         card.className = "node-card";
         grid.appendChild(card);
       }
+      card.className = `node-card ${sevCls}`;
 
-      card.style.borderColor = borderCls;
-      
       card.innerHTML = `
         <div class="card-header">
           <div class="node-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
             <div>
               ${nodeId.replace(/-/g, ' ').toUpperCase()}
               <div class="node-id-sub">ID: ${nodeId}</div>
@@ -734,15 +892,14 @@
         <div class="card-body">
           <div class="sensor-grid">
             <div class="sensor-item">
-              <div class="sensor-lbl"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg> Water Level</div>
+              <div class="sensor-lbl">&#x1F4A7; Water Level</div>
               <div class="sensor-val">${(data.water_level_m||0).toFixed(1)}<span class="sensor-unit">m</span></div>
             </div>
             <div class="sensor-item">
-              <div class="sensor-lbl"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25"/><path d="M8 16h.01M8 20h.01M12 18h.01M12 22h.01M16 16h.01M16 20h.01"/></svg> Rainfall</div>
+              <div class="sensor-lbl">&#x1F327; Rainfall</div>
               <div class="sensor-val">${(data.rainfall_24h_mm||0).toFixed(1)}<span class="sensor-unit">mm</span></div>
             </div>
           </div>
-
           <div class="ml-section">
             <div class="ml-title">ML Prediction Probabilities</div>
             <div class="ml-bars">
@@ -765,10 +922,14 @@
           </div>
         </div>
         <div class="card-footer">
-          <span>LAST UPDATED</span>
-          <span>${data.timestamp || new Date().toLocaleTimeString("en-GB")}</span>
-        </div>
-      `;
+          <span>LAST UPDATED &bull; ${data.timestamp || new Date().toLocaleTimeString("en-GB")}</span>
+          <button class="alert-send-btn" onclick="prefillAndSendAlert('${nodeId}')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.56 3.44 2 2 0 0 1 3.53 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.69a16 16 0 0 0 6.09 6.09l.86-.87a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92z"/></svg>
+            Send Alert
+          </button>
+        </div>`;
+
+      refreshAlertNodeSelect();
     }
 
     function updateSummary() {
@@ -787,77 +948,53 @@
         data: { labels: [], datasets: [] },
         options: {
           responsive: true, maintainAspectRatio: false,
-          color: '#94a3b8',
           scales: {
-            y: { grid: { color: '#334155' }, beginAtZero: true, title: {display: true, text: 'Water Level (m)', color: '#94a3b8'} },
-            x: { grid: { color: '#334155' } }
+            y: { beginAtZero: true, title: { display: true, text: 'Water Level (m)' } },
+            x: {}
           },
-          plugins: { legend: { labels: { color: '#f8fafc' } } }
+          plugins: { legend: { display: true } }
         }
       });
     }
 
     function updateChart(nodeId, data) {
-      if(!mainChart) return;
+      if (!mainChart) return;
       const time = data.timestamp || new Date().toLocaleTimeString("en-GB");
-      
-      // Ensure dataset exists
       let dataset = mainChart.data.datasets.find(d => d.label === nodeId);
       if (!dataset) {
-        const hue = Math.floor(Math.random() * 360);
-        dataset = {
-          label: nodeId,
-          data: [],
-          borderColor: `hsl(${hue}, 80%, 60%)`,
-          backgroundColor: `hsl(${hue}, 80%, 60%, 0.1)`,
-          borderWidth: 2,
-          tension: 0.3,
-          fill: true
-        };
+        const hue = (Object.keys(nodeData).length * 47) % 360;
+        dataset = { label: nodeId, data: [], borderColor: `hsl(${hue},70%,45%)`, backgroundColor: `hsla(${hue},70%,45%,0.08)`, borderWidth: 2, tension: 0.3, fill: true };
         mainChart.data.datasets.push(dataset);
       }
-
-      // Append data
-      // For simplicity in this demo, if the global labels array is missing this time, add it
-      if(!mainChart.data.labels.includes(time)) {
+      if (!mainChart.data.labels.includes(time)) {
         mainChart.data.labels.push(time);
-        if(mainChart.data.labels.length > 20) mainChart.data.labels.shift();
+        if (mainChart.data.labels.length > 20) mainChart.data.labels.shift();
       }
-
-      // Push point
       dataset.data.push(data.water_level_m || 0);
-      if(dataset.data.length > 20) dataset.data.shift();
-      
+      if (dataset.data.length > 20) dataset.data.shift();
       mainChart.update('none');
     }
 
     // ── MQTT ──
-    const client = mqtt.connect(BROKER_WSS, { clientId: CLIENT_ID, clean: true });
-    
-    client.on("connect", () => {
+    const mqttClient = mqtt.connect(BROKER_WSS, { clientId: CLIENT_ID, clean: true });
+    mqttClient.on("connect", () => {
       document.getElementById("mqttStatus").className = "status-badge connected";
       document.getElementById("mqttLabel").textContent = "Connected (HiveMQ)";
-      client.subscribe(TOPIC_IN);
+      mqttClient.subscribe(TOPIC_IN);
       logEvent("system", "Connected to HiveMQ WSS broker", "INFO");
     });
-
-    client.on("message", (topic, payload) => {
+    mqttClient.on("message", (topic, payload) => {
       try {
         const msg = JSON.parse(payload.toString());
         const nodeId = msg.node_id;
         nodeData[nodeId] = msg;
         msgCount++;
-        
         renderNodeCard(nodeId, msg);
         updateSummary();
         updateChart(nodeId, msg);
         logEvent(nodeId, `Telemetry received. ML=${msg.alert_level}`, msg.alert_level);
-      } catch (e) {
-        console.error("MQTT parse error", e);
-      }
+      } catch (e) { console.error("MQTT parse error", e); }
     });
-
-    const BACKEND_URL = window.PRODUCTION_BACKEND_URL || (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'http://localhost:8080' : 'https://floodsense-backend.onrender.com');
 
     // ── MANUAL TELEMETRY ──
     async function submitManualTelemetry() {
@@ -870,15 +1007,9 @@
         flow_velocity_ms: parseFloat(document.getElementById("manualVel").value),
         turbidity_ntu: parseFloat(document.getElementById("manualTurb").value)
       };
-
       try {
         logEvent("system", `Injecting manual data for ${nodeId}...`, "INFO");
-        const response = await fetch(`${BACKEND_URL}/api/simulate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data)
-        });
-        
+        const response = await fetch(`${BACKEND_URL}/api/simulate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
         if (!response.ok) {
           const err = await response.json();
           logEvent("system", `Inject error: ${err.error || response.statusText}`, "ALERT");
@@ -886,61 +1017,186 @@
         }
         const result = await response.json();
         logEvent("system", `Manual inject success. ML=${result.alert_level}`, result.alert_level);
-        
-        // Wait for MQTT to propagate, but we could also manually fetch /api/nodes
       } catch (e) {
-        console.error(e);
         logEvent("system", `Inject failed: ${e.message}`, "ALERT");
       }
     }
 
-    // ── AUTO SIMULATION ──
-    let simInterval = null;
-    const SIM_NODES = [
-      { id: "node-alpha", wl: 15, rain: 5, t: 0 },
-      { id: "node-beta",  wl: 8,  rain: 2, t: 2 },
-      { id: "node-gamma", wl: 35, rain: 25, t: 4 },
-      { id: "node-delta", wl: 42, rain: 40, t: 6 },
+    // ── N-NODE RANDOM GENERATOR ──
+    const STATION_NAMES = [
+      'Riverbend','Lowlands','Eastbank','Deltapeak','Moorside','Crestview',
+      'Valleyrun','Marshgate','Cliffside','Watershed','Floodplain','Highwater',
+      'Tidemark','Gorge','Confluence','Levee','Spillway','Embankment','Weir','Intake'
     ];
-    
+
+    function randBetween(a, b) { return a + Math.random() * (b - a); }
+
+    function generateRandomNodes() {
+      const n = Math.max(1, Math.min(20, parseInt(document.getElementById('nodeCount').value) || 6));
+      generatedNodes = [];
+      const usedNames = new Set();
+
+      for (let i = 0; i < n; i++) {
+        let name;
+        do { name = STATION_NAMES[Math.floor(Math.random() * STATION_NAMES.length)]; } while (usedNames.has(name));
+        usedNames.add(name);
+        const num = i + 1;
+        // ~15% chance of alert-range, ~25% watch-range, rest normal
+        const roll = Math.random();
+        let wl, rain;
+        if (roll < 0.15) { wl = randBetween(8, 12);   rain = randBetween(120, 200); }   // ALERT range
+        else if (roll < 0.40) { wl = randBetween(3, 7); rain = randBetween(60, 110); }  // WATCH range
+        else { wl = randBetween(0.2, 2.8); rain = randBetween(0, 50); }                 // NORMAL
+
+        generatedNodes.push({
+          id: `node-${name.toLowerCase()}-${num}`,
+          label: `${name} Station ${num}`,
+          water_level_m: wl,
+          rainfall_24h_mm: rain,
+          soil_moisture_pct: randBetween(20, 95),
+          flow_velocity_ms: roll < 0.15 ? randBetween(4, 6) : randBetween(0.1, 3),
+          turbidity_ntu: randBetween(50, 900),
+          t: Math.random() * Math.PI * 2
+        });
+      }
+
+      document.getElementById('simStatus').textContent = `Generated ${n} nodes. Hit "Start Auto-Simulation" to begin posting.`;
+      logEvent('system', `Generated ${n} random nodes`, 'INFO');
+
+      // Post each node staggered ~150ms apart
+      generatedNodes.forEach((node, idx) => {
+        setTimeout(() => postNodePayload(node), idx * 150);
+      });
+    }
+
+    function postNodePayload(node) {
+      const jitter = 1 + (Math.random() - 0.5) * 0.2; // ±10%
+      const payload = {
+        node_id:             node.id,
+        node_label:          node.label,
+        water_level_m:       Math.max(0, node.water_level_m  * jitter),
+        rainfall_24h_mm:     Math.max(0, node.rainfall_24h_mm * jitter),
+        soil_moisture_pct:   Math.min(100, Math.max(0, node.soil_moisture_pct * jitter)),
+        flow_velocity_ms:    Math.max(0, node.flow_velocity_ms * jitter),
+        turbidity_ntu:       Math.max(0, node.turbidity_ntu   * jitter)
+      };
+      fetch(`${BACKEND_URL}/api/simulate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(err => console.error('Sim post error:', err));
+    }
+
+    // ── AUTO SIMULATION (drifts generated node set) ──
     document.getElementById("autoSimBtn").addEventListener("click", (e) => {
       const btn = e.currentTarget;
       if (simInterval) {
         clearInterval(simInterval);
         simInterval = null;
         btn.classList.remove("active");
-        btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Auto-Simulation`;
+        btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Auto-Simulation`;
+        document.getElementById('simStatus').textContent = 'Auto-simulation stopped.';
         return;
       }
-      
+      if (generatedNodes.length === 0) {
+        showToast('Click "Generate Random Nodes" first.', 'warn');
+        return;
+      }
       btn.classList.add("active");
-      btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop Simulation`;
-      
+      btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop Simulation`;
+      document.getElementById('simStatus').textContent = `Auto-posting ${generatedNodes.length} nodes every 4 s with ±10% jitter…`;
+
       simInterval = setInterval(() => {
-        const n = SIM_NODES[Math.floor(Math.random() * SIM_NODES.length)];
-        n.t += 0.5;
-        // Sine wave for realistic varying data
-        const wl = n.wl + (Math.sin(n.t) * 5);
-        const rain = n.rain + (Math.cos(n.t) * 3);
-        
-        const payload = {
-          node_id: n.id,
-          water_level_m: Math.max(0, wl),
-          rainfall_24h_mm: Math.max(0, rain),
-          soil_moisture_pct: 70 + (Math.sin(n.t)*10),
-          flow_velocity_ms: 1 + (wl/10),
-          turbidity_ntu: 300 + (rain*10)
-        };
-        
-        fetch(`${BACKEND_URL}/api/simulate`, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(payload)
-        }).catch(err => console.error("Sim error:", err));
+        generatedNodes.forEach((node, idx) => {
+          node.t += 0.5;
+          // Drift values with sine wave
+          const drift = {
+            ...node,
+            water_level_m:    node.water_level_m    + Math.sin(node.t) * 0.5,
+            rainfall_24h_mm:  node.rainfall_24h_mm  + Math.cos(node.t) * 2,
+            soil_moisture_pct:node.soil_moisture_pct + Math.sin(node.t * 0.7) * 3,
+            flow_velocity_ms: node.flow_velocity_ms  + Math.sin(node.t * 1.3) * 0.2,
+            turbidity_ntu:    node.turbidity_ntu     + Math.cos(node.t * 0.9) * 20,
+          };
+          setTimeout(() => postNodePayload(drift), idx * 150);
+        });
       }, 4000);
     });
 
-    // Init
+    // ── ALERT DELIVERY ──
+    // Restore phone from localStorage
+    (() => {
+      const saved = localStorage.getItem('tf_alert_phone');
+      if (saved) document.getElementById('alertPhone').value = saved;
+    })();
+
+    async function sendAlertNow() {
+      const phone  = document.getElementById('alertPhone').value.trim();
+      const nodeId = document.getElementById('alertNodeSelect').value;
+      if (!phone) { showToast('Enter a WhatsApp number first.', 'warn'); return; }
+      if (!nodeId) { showToast('No node selected (generate some nodes first).', 'warn'); return; }
+
+      logEvent('system', `Sending alert for ${nodeId} → ${phone}…`, 'INFO');
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/alert/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ node_id: nodeId, to: phone })
+        });
+        const json = await res.json();
+
+        if (res.ok && json.sent) {
+          showToast(`✅ Alert sent! SID: ${json.sid}`, 'ok');
+          logEvent(nodeId, `WhatsApp alert sent → ${phone}`, 'INFO');
+        } else if (res.status === 429) {
+          showToast('⏱ Alert already sent in last 5 min. Wait before retrying.', 'warn');
+          logEvent(nodeId, 'Alert blocked by cooldown (300s).', 'WATCH');
+        } else if (json.twilio_code === 63016 || json.twilio_code === '63016') {
+          showToast("📵 Number hasn't joined the Twilio sandbox. Send 'join <code>' to +1 415 523 8886 on WhatsApp first.", 'err');
+          logEvent(nodeId, 'Twilio 63016: sandbox not joined.', 'ALERT');
+        } else {
+          const msg = json.error || json.twilio_msg || 'Unknown error';
+          showToast(`❌ Failed: ${msg}`, 'err');
+          logEvent(nodeId, `Alert failed: ${msg}`, 'ALERT');
+        }
+      } catch (e) {
+        showToast(`❌ Network error: ${e.message}`, 'err');
+        logEvent('system', `Alert send error: ${e.message}`, 'ALERT');
+      }
+    }
+
+    // ── WOKWI NODE TABS ──
+    function renderWokwiPanel(n) {
+      const key = `tf_wokwi_node_${n}`;
+      const saved = localStorage.getItem(key) || '';
+      const panel = document.getElementById(`wokwi-n${n}`);
+      panel.innerHTML = `
+        <div>
+          <label style="font-size:11px; font-weight:700; color:var(--bg-header); text-transform:uppercase;">Paste your Wokwi Project URL (Node ${n})</label>
+          <input class="wokwi-url-input" type="url" placeholder="https://wokwi.com/projects/..." value="${saved}"
+            oninput="onWokwiUrlChange(${n}, this.value)" id="wokwi-url-${n}">
+        </div>
+        <div style="flex:1;">
+          ${saved
+            ? `<iframe src="${saved}?embed=1" width="100%" height="100%" frameborder="0" style="min-height:400px; border:1px solid var(--border-color);"></iframe>`
+            : `<div class="wokwi-placeholder">No project linked yet.<br><br>See <strong>firmware/NODES_SETUP.md</strong> to create a Wokwi project for Node ${n}, then paste its share URL here.</div>`
+          }
+        </div>`;
+    }
+    function onWokwiUrlChange(n, url) {
+      localStorage.setItem(`tf_wokwi_node_${n}`, url);
+      renderWokwiPanel(n); // re-render so iframe loads
+    }
+    function switchWokwiTab(n, btn) {
+      document.querySelectorAll('.wokwi-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.wokwi-node-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(`wokwi-n${n}`).classList.add('active');
+    }
+    // Init all 4 Wokwi panels
+    [1,2,3,4].forEach(n => renderWokwiPanel(n));
+
+    // Init chart
     initChart();
   </script>
 </body>

@@ -54,3 +54,5 @@ logs/
 htmlcov/
 .pytest_cache/
 .tox/
+
+.vercel

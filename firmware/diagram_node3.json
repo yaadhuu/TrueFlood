@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "author": "FloodSense",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 200, "left": 230, "attrs": {} },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "sw1",
+      "top": 100,
+      "left": -60,
+      "attrs": { "color": "blue", "label": "SW1-LOW" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "sw2",
+      "top": 180,
+      "left": -60,
+      "attrs": { "color": "cyan", "label": "SW2-MID" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "sw3",
+      "top": 255.8,
+      "left": -57.6,
+      "attrs": { "color": "green", "label": "SW3-HIGH" }
+    },
+    { "type": "wokwi-dht22", "id": "dht22", "top": 420, "left": -80, "attrs": {} },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "soil",
+      "top": 560,
+      "left": -80,
+      "attrs": { "label": "Soil Moisture (%)" }
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "rain",
+      "top": 75.5,
+      "left": 662.2,
+      "attrs": { "label": "Rainfall (mm)" }
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "turb",
+      "top": 240,
+      "left": 660,
+      "attrs": { "label": "Turbidity (NTU)" }
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "flow",
+      "top": 400,
+      "left": 660,
+      "attrs": { "label": "Flow Velocity" }
+    },
+    {
+      "type": "wokwi-lcd1602",
+      "id": "lcd",
+      "top": 580,
+      "left": 580,
+      "attrs": { "pins": "i2c", "address": "0x27" }
+    },
+    { "type": "wokwi-resistor", "id": "r1", "top": 120, "left": 490, "attrs": { "value": "220" } },
+    { "type": "wokwi-resistor", "id": "r2", "top": 200, "left": 490, "attrs": { "value": "220" } },
+    { "type": "wokwi-resistor", "id": "r3", "top": 280, "left": 490, "attrs": { "value": "220" } },
+    {
+      "type": "wokwi-led",
+      "id": "ledG",
+      "top": 120,
+      "left": 580,
+      "attrs": { "color": "green", "label": "NORMAL" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledY",
+      "top": 200,
+      "left": 580,
+      "attrs": { "color": "yellow", "label": "WATCH" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledR",
+      "top": 280,
+      "left": 580,
+      "attrs": { "color": "red", "label": "ALERT" }
+    },
+    { "type": "wokwi-buzzer", "id": "buz", "top": 370, "left": 490, "attrs": { "volume": "0.1" } }
+  ],
+  "connections": [
+    [ "sw1:2.r", "esp:3V3", "red", [ "v0" ] ],
+    [ "sw1:1.l", "esp:23", "blue", [ "v0" ] ],
+    [ "sw2:2.r", "esp:3V3", "red", [ "v0" ] ],
+    [ "sw2:1.l", "esp:14", "cyan", [ "v0" ] ],
+    [ "sw3:2.r", "esp:3V3", "red", [ "v0" ] ],
+    [ "sw3:1.l", "esp:27", "green", [ "v0" ] ],
+    [ "dht22:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "dht22:GND", "esp:GND.1", "black", [ "v0" ] ],
+    [ "dht22:SDA", "esp:12", "orange", [ "v0" ] ],
+    [ "soil:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "soil:GND", "esp:GND.2", "black", [ "v0" ] ],
+    [ "soil:SIG", "esp:34", "purple", [ "v0" ] ],
+    [ "rain:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "rain:GND", "esp:GND.3", "black", [ "v0" ] ],
+    [ "rain:SIG", "esp:VP", "green", [ "v0" ] ],
+    [ "turb:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "turb:GND", "esp:GND.1", "black", [ "v0" ] ],
+    [ "turb:SIG", "esp:32", "yellow", [ "v0" ] ],
+    [ "flow:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "flow:GND", "esp:GND.2", "black", [ "v0" ] ],
+    [ "flow:SIG", "esp:25", "cyan", [ "v0" ] ],
+    [ "lcd:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "lcd:GND", "esp:GND.3", "black", [ "v0" ] ],
+    [ "lcd:SDA", "esp:21", "blue", [ "v0" ] ],
+    [ "lcd:SCL", "esp:22", "blue", [ "v0" ] ],
+    [ "esp:26", "r1:1", "green", [ "v0" ] ],
+    [ "r1:2", "ledG:A", "green", [ "v0" ] ],
+    [ "ledG:C", "esp:GND.1", "black", [ "v0" ] ],
+    [ "esp:33", "r2:1", "yellow", [ "v0" ] ],
+    [ "r2:2", "ledY:A", "yellow", [ "v0" ] ],
+    [ "ledY:C", "esp:GND.2", "black", [ "v0" ] ],
+    [ "esp:19", "r3:1", "red", [ "v0" ] ],
+    [ "r3:2", "ledR:A", "red", [ "v0" ] ],
+    [ "ledR:C", "esp:GND.3", "black", [ "v0" ] ],
+    [ "esp:18", "buz:1", "purple", [ "v0" ] ],
+    [ "buz:2", "esp:GND.1", "black", [ "v0" ] ]
+  ],
+  "dependencies": {}
+}

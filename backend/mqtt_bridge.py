@@ -255,6 +255,60 @@ def api_simulate():
     })
 
 
+@app.route("/api/alert/send", methods=["POST"])
+def api_alert_send():
+    """
+    Dashboard-facing "Send Alert" button.
+    Sends a real WhatsApp message for a node's LATEST known reading to a
+    phone number the user types into the UI (no server secret needed).
+
+    Body: { "node_id": "node-alpha", "to": "+919876543210" }
+
+    Safety:
+      - "to" is validated as digits/plus only and formatted as whatsapp:+E164.
+      - Uses the SAME per-node cooldown as automatic alerts (300s) so the
+        public endpoint can't be used to spam Twilio credits.
+      - If the node has no telemetry yet, returns 404 instead of sending
+        a message with fabricated numbers.
+    """
+    if not _TWILIO_READY:
+        return jsonify({"error": "Twilio credentials not configured on server."}), 503
+
+    body = request.get_json(silent=True) or {}
+    node_id = str(body.get("node_id", "")).strip()
+    to_raw  = str(body.get("to", "")).strip()
+
+    if not node_id:
+        return jsonify({"error": "node_id is required"}), 422
+    if not to_raw:
+        return jsonify({"error": "to (phone number) is required"}), 422
+
+    digits = to_raw.replace(" ", "").replace("-", "")
+    if not digits.startswith("+"):
+        digits = "+" + digits.lstrip("+")
+    if not digits[1:].isdigit() or len(digits) < 8:
+        return jsonify({"error": "to must be a valid phone number, e.g. +919876543210"}), 422
+    to_whatsapp = f"whatsapp:{digits}"
+
+    node = db.get_node(node_id)
+    if not node:
+        return jsonify({"error": f"No telemetry received yet for node '{node_id}'"}), 404
+
+    alert = node.get("alert_level", "NORMAL")
+    result = send_whatsapp(node_id, alert, node, to_override=to_whatsapp, return_result=True)
+
+    if result.get("success"):
+        return jsonify({"sent": True, "sid": result.get("sid"), "to": digits})
+    if result.get("error") == "cooldown":
+        return jsonify({"sent": False, "error": "This node already sent an alert in the last 5 minutes. Try again shortly."}), 429
+    return jsonify({
+        "sent":        False,
+        "error":       result.get("error"),
+        "twilio_code": result.get("twilio_code"),
+        "twilio_msg":  result.get("twilio_msg"),
+    }), 500
+
+
 @app.route("/api/test-alert", methods=["POST"])
 def api_test_alert():
     """
@@ -305,6 +359,7 @@ def send_whatsapp(
     *,
     force: bool = False,
     return_result: bool = False,
+    to_override: str | None = None,
 ) -> dict:
     """
     Send a WhatsApp alert via Twilio.
@@ -313,6 +368,10 @@ def send_whatsapp(
         force:         If True, bypass the per-node cooldown timer.
         return_result: If True, return a dict with {success, sid, error, twilio_code, twilio_msg}
                        instead of None — used by /api/test-alert.
+        to_override:   If set, send to this WhatsApp number instead of the
+                       server's TWILIO_TO env var. Must be "whatsapp:+<E.164>".
+                       Lets anyone using the dashboard's "Send Alert" button
+                       type their own number without a redeploy.
     """
     if not _TWILIO_READY:
         return {"success": False, "error": "Twilio not ready"}
@@ -350,9 +409,11 @@ def send_whatsapp(
         "alert":   alert,
     }
 
+    send_to = to_override or TWILIO_TO
+
     try:
         client = Client(TWILIO_SID, TWILIO_AUTH)
-        msg    = client.messages.create(from_=TWILIO_FROM, to=TWILIO_TO, body=body)
+        msg    = client.messages.create(from_=TWILIO_FROM, to=send_to, body=body)
         log.info("[WhatsApp][%s] Sent – SID: %s", node_id, msg.sid)
         attempt.update({"success": True, "sid": msg.sid})
         _alert_log.append(attempt)
