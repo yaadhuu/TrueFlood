@@ -75,12 +75,13 @@ TOPIC_IN      = "flood/sensor/+"
 TOPIC_OUT_FMT = "flood/alert/{node_id}"
 
 # ── Twilio (all optional — alerts silently skipped when absent) ───
-TWILIO_SID  = os.getenv("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_FROM = os.getenv("TWILIO_FROM")
-TWILIO_TO   = os.getenv("TWILIO_TO")
+TWILIO_SID     = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_API_KEY = os.getenv("TWILIO_API_KEY")
+TWILIO_AUTH    = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_FROM    = os.getenv("TWILIO_FROM")
+TWILIO_TO      = os.getenv("TWILIO_TO")
 
-_TWILIO_READY = all([TWILIO_SID, TWILIO_AUTH, TWILIO_FROM, TWILIO_TO])
+_TWILIO_READY = all([TWILIO_SID or TWILIO_API_KEY, TWILIO_AUTH, TWILIO_FROM, TWILIO_TO])
 if not _TWILIO_READY:
     log.warning(
         "Twilio credentials incomplete – WhatsApp alerts disabled. "
@@ -351,7 +352,12 @@ def send_whatsapp(
     }
 
     try:
-        client = Client(TWILIO_SID, TWILIO_AUTH)
+        if TWILIO_SID and TWILIO_SID.startswith("AC"):
+            client = Client(TWILIO_SID, TWILIO_AUTH)
+        elif TWILIO_API_KEY and TWILIO_SID:
+            client = Client(TWILIO_API_KEY, TWILIO_AUTH, account_sid=TWILIO_SID)
+        else:
+            client = Client(TWILIO_SID, TWILIO_AUTH)
         msg    = client.messages.create(from_=TWILIO_FROM, to=TWILIO_TO, body=body)
         log.info("[WhatsApp][%s] Sent – SID: %s", node_id, msg.sid)
         attempt.update({"success": True, "sid": msg.sid})
