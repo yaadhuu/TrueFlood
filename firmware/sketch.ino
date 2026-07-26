@@ -29,18 +29,20 @@ char TOPIC_ALERT[64];    // flood/alert/<NODE_ID>
 char CLIENT_ID[32];      // esp32-<NODE_ID>  (unique per node — fixes CLIENT_ID collision bug)
 
 // ── Pin Definitions ───────────────────────────────────────────────
-#define PIN_SW1       23    // Float switch LOW
-#define PIN_SW2       14    // Float switch MID
-#define PIN_SW3       27    // Float switch HIGH
-#define PIN_DHT       12    // DHT22
-#define PIN_SOIL      34    // Soil Moisture ADC
-#define PIN_RAIN      36    // Rainfall ADC (VP)
-#define PIN_TURB      32    // Turbidity ADC
-#define PIN_FLOW      25    // Flow velocity ADC (pot in Wokwi)
-#define PIN_LED_G     26    // Green LED – NORMAL
-#define PIN_LED_Y     33    // Yellow LED – WATCH
-#define PIN_LED_R     19    // Red LED – ALERT
-#define PIN_BUZZER    18    // Buzzer
+#define PIN_SW1             23    // Float switch LOW
+#define PIN_SW2             14    // Float switch MID
+#define PIN_SW3             27    // Float switch HIGH
+#define PIN_ULTRASONIC_TRIG 5     // HC-SR04 Ultrasonic TRIG
+#define PIN_ULTRASONIC_ECHO 17    // HC-SR04 Ultrasonic ECHO
+#define PIN_DHT             12    // DHT22
+#define PIN_SOIL            34    // Soil Moisture ADC
+#define PIN_RAIN            36    // Rainfall ADC (VP)
+#define PIN_LDR             32    // Turbidity LDR Photoresistor ADC
+#define PIN_FLOW            25    // Flow velocity ADC (pot in Wokwi)
+#define PIN_LED_G           26    // Green LED – NORMAL
+#define PIN_LED_Y           33    // Yellow LED – WATCH
+#define PIN_LED_R           19    // Red LED – ALERT
+#define PIN_BUZZER          18    // Buzzer
 
 // ── Sensor Config ─────────────────────────────────────────────────
 #define DHT_TYPE           DHT22
@@ -58,13 +60,13 @@ PubSubClient     mqtt(wifiClient);
 volatile uint32_t flowPulseCount = 0;
 unsigned long lastPublish    = 0;
 unsigned long lastFlowTime   = 0;
-unsigned long lastMqttRetry  = 0;   // ← new: rate-limit reconnect attempts
+unsigned long lastMqttRetry  = 0;   // rate-limit reconnect attempts
 String        currentAlert   = "NORMAL";
 
 // ─────────────────────────────────────────────────────────────────
-// ADC HELPERS
+// ADC / SENSOR HELPERS
 // ─────────────────────────────────────────────────────────────────
-float readWaterLevel() {
+float readWaterLevelSwitches() {
   bool sw1 = digitalRead(PIN_SW1);
   bool sw2 = digitalRead(PIN_SW2);
   bool sw3 = digitalRead(PIN_SW3);
@@ -72,6 +74,24 @@ float readWaterLevel() {
   if (sw2) return 20.0f;   // WATCH level
   if (sw1) return 10.0f;   // NORMAL level
   return 0.3f;             // DRY
+}
+
+float readWaterLevelUltrasonic() {
+  digitalWrite(PIN_ULTRASONIC_TRIG, LOW);
+  delayMicroseconds(2);
+  digitalWrite(PIN_ULTRASONIC_TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(PIN_ULTRASONIC_TRIG, LOW);
+  long duration = pulseIn(PIN_ULTRASONIC_ECHO, HIGH, 30000); // 30ms timeout
+  if (duration == 0) return readWaterLevelSwitches(); // Fallback if no pulse
+  float distance_cm = duration * 0.0343f / 2.0f;
+  float tank_depth_cm = 400.0f; // 4m depth reference
+  float level_m = (tank_depth_cm - distance_cm) / 100.0f;
+  return max(0.0f, level_m);
+}
+
+float readWaterLevel() {
+  return readWaterLevelUltrasonic();
 }
 
 float readRainfall() {
@@ -83,7 +103,8 @@ float readSoilMoisture() {
 }
 
 float readTurbidity() {
-  return analogRead(PIN_TURB) * (1000.0f / 4095.0f);  // 0–1000 NTU
+  // LDR photoresistor: murkier water scatters more light
+  return analogRead(PIN_LDR) * (1000.0f / 4095.0f);  // 0–1000 NTU
 }
 
 float readFlowVelocity() {
@@ -222,13 +243,15 @@ void setup() {
   Serial.printf("   Alert  topic : %s\n", TOPIC_ALERT);
 
   // GPIO
-  pinMode(PIN_SW1,    INPUT);
-  pinMode(PIN_SW2,    INPUT);
-  pinMode(PIN_SW3,    INPUT);
-  pinMode(PIN_LED_G,  OUTPUT);
-  pinMode(PIN_LED_Y,  OUTPUT);
-  pinMode(PIN_LED_R,  OUTPUT);
-  pinMode(PIN_BUZZER, OUTPUT);
+  pinMode(PIN_SW1,             INPUT);
+  pinMode(PIN_SW2,             INPUT);
+  pinMode(PIN_SW3,             INPUT);
+  pinMode(PIN_ULTRASONIC_TRIG, OUTPUT);
+  pinMode(PIN_ULTRASONIC_ECHO, INPUT);
+  pinMode(PIN_LED_G,           OUTPUT);
+  pinMode(PIN_LED_Y,           OUTPUT);
+  pinMode(PIN_LED_R,           OUTPUT);
+  pinMode(PIN_BUZZER,          OUTPUT);
 
   // LCD
   Wire.begin(21, 22);

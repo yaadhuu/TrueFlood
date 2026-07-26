@@ -41,11 +41,18 @@
       "attrs": { "label": "Rainfall (mm)" }
     },
     {
-      "type": "wokwi-potentiometer",
-      "id": "turb",
+      "type": "wokwi-photoresistor-sensor",
+      "id": "ldr",
       "top": 240,
       "left": 660,
-      "attrs": { "label": "Turbidity (NTU)" }
+      "attrs": { "label": "Turbidity (LDR)" }
+    },
+    {
+      "type": "wokwi-hc-sr04",
+      "id": "ultra",
+      "top": 420,
+      "left": 100,
+      "attrs": { "label": "Water Level (HC-SR04)" }
     },
     {
       "type": "wokwi-potentiometer",
@@ -103,9 +110,13 @@
     [ "rain:VCC", "esp:3V3", "red", [ "v0" ] ],
     [ "rain:GND", "esp:GND.3", "black", [ "v0" ] ],
     [ "rain:SIG", "esp:VP", "green", [ "v0" ] ],
-    [ "turb:VCC", "esp:3V3", "red", [ "v0" ] ],
-    [ "turb:GND", "esp:GND.1", "black", [ "v0" ] ],
-    [ "turb:SIG", "esp:32", "yellow", [ "v0" ] ],
+    [ "ldr:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "ldr:GND", "esp:GND.1", "black", [ "v0" ] ],
+    [ "ldr:AO", "esp:32", "yellow", [ "v0" ] ],
+    [ "ultra:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "ultra:GND", "esp:GND.2", "black", [ "v0" ] ],
+    [ "ultra:TRIG", "esp:5", "purple", [ "v0" ] ],
+    [ "ultra:ECHO", "esp:17", "orange", [ "v0" ] ],
     [ "flow:VCC", "esp:3V3", "red", [ "v0" ] ],
     [ "flow:GND", "esp:GND.2", "black", [ "v0" ] ],
     [ "flow:SIG", "esp:25", "cyan", [ "v0" ] ],
