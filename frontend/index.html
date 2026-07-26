@@ -777,7 +777,7 @@
     </div>
 
     <!-- TAB: ANALYTICS -->
-    <div id="tab-history" class="tab-content">
+    <div id="tab-analytics" class="tab-content">
       <div class="analytics-grid">
         <div class="chart-card">
           <div style="font-weight:600; margin-bottom:16px; font-size:14px;">Historical Water Levels (All Nodes)</div>
@@ -819,11 +819,38 @@
     }
 
     // ── TAB SWITCHING ──
-    function switchTab(tabId) {
+    function switchTab(tabId, btn) {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      event.currentTarget.classList.add('active');
+      (btn || event.currentTarget).classList.add('active');
       document.getElementById('tab-' + tabId).classList.add('active');
+      // Load historical data when Analytics tab is opened
+      if (tabId === 'analytics') loadNodeHistory();
+    }
+
+    // ── LOAD HISTORY FROM API ──
+    async function loadNodeHistory() {
+      const nodes = Object.keys(nodeData);
+      if (!nodes.length || !mainChart) return;
+      // Fetch the most-recent-node history by default
+      const nodeId = document.getElementById('alertNodeSelect').value || nodes[0];
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/history/${nodeId}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        const hist = json.history || [];
+        if (!hist.length) return;
+        // Update chart with historical data
+        mainChart.data.labels = hist.map(h => (h.ts || '').slice(11, 19));
+        let ds = mainChart.data.datasets.find(d => d.label === nodeId);
+        if (!ds) {
+          const hue = (Object.keys(nodeData).length * 47) % 360;
+          ds = { label: nodeId, data: [], borderColor: `hsl(${hue},70%,45%)`, backgroundColor: `hsla(${hue},70%,45%,0.08)`, borderWidth: 2, tension: 0.3, fill: true };
+          mainChart.data.datasets.push(ds);
+        }
+        ds.data = hist.map(h => h.water_level_m || 0);
+        mainChart.update();
+      } catch (e) { console.warn('History fetch failed:', e); }
     }
 
     // ── LOGGER ──
