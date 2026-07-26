@@ -1,6 +1,11 @@
 {
   "version": 2,
-  "outputDirectory": "frontend",
+  "builds": [
+    {
+      "src": "frontend/index.html",
+      "use": "@vercel/static"
+    }
+  ],
   "routes": [
     {
       "src": "/(.*)",
