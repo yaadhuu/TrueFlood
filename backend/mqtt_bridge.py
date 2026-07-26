@@ -49,7 +49,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(_HERE, ".env"))
 
 sys.path.insert(0, _HERE)
-from predict import predict_flood  # noqa: E402
+from predict import predictor  # noqa: E402
 import db  # noqa: E402
 
 # ── Logging ───────────────────────────────────────────────────────
@@ -220,12 +220,12 @@ def api_simulate():
 
     # Run ML prediction
     try:
-        result = predict_flood(node_id=node_id, **floats)
+        result = predictor.predict(node_id, floats)
     except Exception as exc:
-        log.error("[ML][simulate] predict_flood failed: %s", exc)
+        log.error("[ML][simulate] prediction failed: %s", exc)
         return jsonify({"error": f"ML prediction failed: {exc}"}), 500
 
-    alert = result["alert_level"]
+    alert = result["status"]
     probs = result["probabilities"]
     ts    = datetime.now(timezone.utc).isoformat()
 
@@ -423,19 +423,12 @@ def on_message(client, userdata, msg):
 
     # ML prediction (pure computation – no shared state touched yet)
     try:
-        result = predict_flood(
-            water_level_m     = float(data.get("water_level_m",     0)),
-            rainfall_24h_mm   = float(data.get("rainfall_24h_mm",   0)),
-            soil_moisture_pct = float(data.get("soil_moisture_pct", 0)),
-            flow_velocity_ms  = float(data.get("flow_velocity_ms",  0)),
-            turbidity_ntu     = float(data.get("turbidity_ntu",     0)),
-            node_id           = node_id,
-        )
+        result = predictor.predict(node_id, data)
     except Exception as exc:
-        log.error("[ML][%s] predict_flood failed: %s", node_id, exc)
+        log.error("[ML][%s] prediction failed: %s", node_id, exc)
         return
 
-    alert = result["alert_level"]
+    alert = result["status"]
     probs = result["probabilities"]
     log.info(
         "[ML][%s] %s  N=%.2f W=%.2f A=%.2f",
