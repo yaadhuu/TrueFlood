@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: pytest
+        run: pytest tests/ -v
+
+  train-and-gate:
+    # The single highest-value check in the pipeline: it re-derives the
+    # dataset, retrains, and compares the model against a persistence
+    # baseline. The original model shipped while LOSING to that baseline
+    # because nothing ever measured it.
+    #
+    # --no-gate is passed deliberately. The demo dataset's label is a
+    # threshold rule over its own features, so the model is expected to lose;
+    # the run still prints the comparison table and writes it into
+    # MODEL_CARD.md, which is the point. Remove --no-gate to make a
+    # baseline loss fail the build.
+    name: train and benchmark (demo track)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: rescale dataset to Wokwi sensor ranges
+        run: python ml_pipeline/rescale_dataset.py
+      - name: train and benchmark against baselines
+        run: python ml_pipeline/train.py --no-gate
+      - name: drift monitor sanity check
+        run: |
+          python monitoring/seed_test_db.py --db /tmp/ci.db --rows 500
+          python monitoring/drift.py --db /tmp/ci.db --hours 24
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-card
+          path: |
+            MODEL_CARD.md
+            ml_pipeline/model_card.json
+
+  train-real:
+    # Real-data track. Uses the committed API cache in ml_pipeline/raw/, so it
+    # does not hit USGS or Open-Meteo on every push.
+    name: train and benchmark (real-data track)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python ml_pipeline/train_real.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-card-real
+          path: |
+            MODEL_CARD_REAL.md
+            ml_pipeline/model_card_real.json

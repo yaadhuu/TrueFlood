@@ -1,0 +1,87 @@
+services:
+  - type: web
+    name: floodsense-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    # --workers 1 is load-bearing: the MQTT client and the predictor's
+    # hysteresis state are process-local. Two workers = two subscriptions,
+    # two sets of debounce state, duplicate alerts. mqtt_bridge.py asserts
+    # WEB_CONCURRENCY == 1 at import and refuses to boot otherwise.
+    startCommand: gunicorn --chdir backend mqtt_bridge:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    healthCheckPath: /api/health
+    # A persistent disk is required for the SQLite history to survive a
+    # restart — Render's free tier filesystem is ephemeral. Uncomment on a
+    # paid instance, or move db.py to Postgres via DATABASE_URL.
+    # disk:
+    #   name: floodsense-data
+    #   mountPath: /var/data
+    #   sizeGB: 1
+    envVars:
+      # ── MQTT ──────────────────────────────────────────────────
+      # broker.hivemq.com is public: anyone can publish fake sensor data to
+      # your topics, which makes the API auth below pointless on its own.
+      # Point this at a private HiveMQ Cloud cluster (free tier) and set
+      # MQTT_USER / MQTT_PASS.
+      - key: MQTT_BROKER
+        sync: false
+      - key: MQTT_PORT
+        value: "8883"
+      - key: MQTT_USER
+        sync: false
+      - key: MQTT_PASS
+        sync: false
+
+      # ── Storage ───────────────────────────────────────────────
+      # With the disk above mounted, set this to /var/data/flood_data.db.
+      - key: DB_PATH
+        sync: false
+
+      # ── Model ─────────────────────────────────────────────────
+      - key: MODEL_PATH
+        sync: false
+
+      # ── Security ──────────────────────────────────────────────
+      - key: DASHBOARD_KEY
+        generateValue: true
+      - key: ALERT_RECIPIENTS      # comma-separated E.164, e.g. +919876543210
+        sync: false
+      - key: ALLOWED_ORIGINS       # e.g. https://your-frontend.vercel.app
+        sync: false
+      - key: TEST_SECRET
+        sync: false
+
+      # ── Alerting ──────────────────────────────────────────────
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM
+        sync: false
+      - key: TWILIO_TO
+        sync: false
+      - key: SMS_FALLBACK_FROM     # optional Twilio SMS-capable number
+        sync: false
+      - key: GLOBAL_MAX_PER_HOUR
+        value: "20"
+
+      # ── Behaviour ─────────────────────────────────────────────
+      - key: DEMO_MODE
+        value: "true"
+      - key: NODE_STALE_SEC
+        value: "60"
+      - key: NODE_COORDS           # "node-1:43.027,-91.173;node-2:19.076,72.877"
+        sync: false
+      - key: WEB_CONCURRENCY
+        value: "1"
+
+  # Daily drift check. Alerts by failing (nonzero exit) when live telemetry
+  # drifts outside the model's training support.
+  - type: cron
+    name: floodsense-drift
+    runtime: python
+    schedule: "0 6 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python monitoring/drift.py --db $DB_PATH --hours 24
+    envVars:
+      - key: DB_PATH
+        sync: false

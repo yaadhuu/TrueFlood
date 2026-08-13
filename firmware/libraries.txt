@@ -1,0 +1,12 @@
+# Wokwi library manifest — versions pinned.
+# Unpinned libraries silently change API under you: ArduinoJson 6 -> 7 replaced
+# StaticJsonDocument with JsonDocument, and sketch.ino uses the 7 API.
+#
+# Adafruit_BMP085 is the correct driver for the wokwi-bmp180 part: BMP085 and
+# BMP180 are register-compatible.
+Adafruit BMP085 Library@1.2.4
+DHT sensor library@1.4.6
+Adafruit Unified Sensor@1.1.14
+LiquidCrystal I2C@1.1.4
+PubSubClient@2.8
+ArduinoJson@7.2.0

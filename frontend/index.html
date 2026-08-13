@@ -1,0 +1,1899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TrueFlood Command Center</title>
+  <meta name="description" content="Professional Multi-Node Flood Early-Warning Telemetry & Predictive Analytics Command Center.">
+
+  <!-- Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.0.5/mqtt.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+  <style>
+    :root {
+      /* Windows-95 system palette. Pure RGB only — no subtle grays. */
+      --bg-main: #C0C0C0;
+      --bg-card: #C0C0C0;
+      --bg-card-hover: #C8C8C8;
+      --bg-header: #C0C0C0;
+      --bg-sunken: #FFFFFF;      /* content wells: white sunken panels */
+      --border-color: #808080;
+      --border-light: #FFFFFF;
+
+      --text-main: #000000;
+      --text-muted: #000000;     /* muted-but-still-black; 90s had no soft grays for text */
+      --text-inverse: #FFFFFF;
+
+      --accent: #0000FF;         /* pure blue, classic hyperlink */
+      --accent-hover: #000080;
+
+      --title-bar: #000080;
+      --title-bar-end: #1084D0;
+
+      --status-normal: #00AA00;
+      --status-watch: #FFFF00;
+      --status-watch-text: #806600; /* pure yellow text is illegible on gray/white; use for text, not fills */
+      --status-alert: #FF0000;
+      --status-stale: #808080;
+
+      --font-ui: "MS Sans Serif", "Tahoma", "Segoe UI", Geneva, Verdana, sans-serif;
+      --font-head: "Arial Black", Impact, Haettenschweiler, sans-serif;
+      --font-mono: "Courier New", Courier, monospace;
+
+      --radius: 0px; /* no border-radius anywhere, ever */
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-ui);
+      background-color: var(--bg-main);
+      background-image:
+        linear-gradient(45deg, #B8B8B8 25%, transparent 25%),
+        linear-gradient(-45deg, #B8B8B8 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #B8B8B8 75%),
+        linear-gradient(-45deg, transparent 75%, #B8B8B8 75%);
+      background-size: 4px 4px;
+      background-position: 0 0, 0 2px, 2px -2px, -2px 0px;
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Reusable bevels — the signature effect. Outset = raised, Inset = sunken. */
+    .bevel-out {
+      border: 2px solid;
+      border-color: #FFFFFF #808080 #808080 #FFFFFF;
+      box-shadow: inset -1px -1px 0 #404040, inset 1px 1px 0 #DFDFDF;
+    }
+    .bevel-in {
+      border: 2px solid;
+      border-color: #808080 #FFFFFF #FFFFFF #808080;
+      box-shadow: inset 1px 1px 0 #404040, inset -1px -1px 0 #DFDFDF;
+    }
+    .title-bar {
+      background: linear-gradient(to right, var(--title-bar), var(--title-bar-end));
+      color: #FFFFFF;
+      font-weight: 700;
+      font-family: var(--font-ui);
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    /* SCROLLBAR */
+    ::-webkit-scrollbar { width: 16px; height: 16px; }
+    ::-webkit-scrollbar-track { background: #C0C0C0; }
+    ::-webkit-scrollbar-thumb { background: #C0C0C0; border: 2px solid; border-color: #FFFFFF #808080 #808080 #FFFFFF; }
+
+    /* HEADER — Windows 95 taskbar / title bar hybrid */
+    header {
+      background: linear-gradient(to right, var(--title-bar), var(--title-bar-end));
+      color: #FFFFFF;
+      padding: 0 16px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 2px solid #000000;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand svg { color: #FFFF00; }
+    .brand-title {
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: #FFFFFF;
+    }
+    .brand-subtitle {
+      font-size: 10px;
+      color: #FFFF00;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-family: var(--font-mono);
+    }
+
+    /* TABS NAV — pressed-tab look */
+    .tabs-nav {
+      display: flex;
+      gap: 4px;
+      height: 100%;
+      align-items: center;
+    }
+    .tab-btn {
+      background: #C0C0C0;
+      border: 2px solid;
+      border-color: #FFFFFF #808080 #808080 #FFFFFF;
+      box-shadow: inset -1px -1px 0 #404040, inset 1px 1px 0 #DFDFDF;
+      color: #000000;
+      font-family: var(--font-ui);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      padding: 7px 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: none;
+    }
+    .tab-btn:hover { background: #D4D4D4; }
+    .tab-btn.active {
+      background: #C0C0C0;
+      color: #000000;
+      border-color: #808080 #FFFFFF #FFFFFF #808080;
+      box-shadow: inset 1px 1px 0 #404040, inset -1px -1px 0 #DFDFDF;
+      transform: translate(1px, 1px);
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #C0C0C0;
+      color: #000000;
+      border: 2px solid;
+      border-color: #808080 #FFFFFF #FFFFFF #808080;
+      box-shadow: inset 1px 1px 0 #404040, inset -1px -1px 0 #DFDFDF;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+    }
+    .status-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #808080;
+      border: 1px solid #000;
+    }
+    .status-badge.connected .status-dot { background: var(--status-normal); }
+    .status-badge.error .status-dot { background: var(--status-alert); }
+
+    /* MAIN CONTENT & TABS */
+    main {
+      flex: 1;
+      padding: 20px;
+      max-width: 1440px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* OVERVIEW STATS */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border: 2px solid;
+      border-color: #FFFFFF #808080 #808080 #FFFFFF;
+      box-shadow: inset -1px -1px 0 #404040, inset 1px 1px 0 #DFDFDF;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .stat-title {
+      font-size: 10px;
+      color: #000000;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+    }
+    .stat-val {
+      font-size: 34px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      line-height: 1.1;
+      color: #000000;
+    }
+    .val-accent { color: var(--accent); }
+    .val-alert { color: var(--status-alert); }
+    .val-watch { color: #000000; } /* pure yellow text fails contrast on gray; keep readable */
+
+    /* NODE GRID (LIVE TAB) */
+    .node-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+    .node-card {
+      background: var(--bg-card);
+      border: 2px solid;
+      border-color: #FFFFFF #808080 #808080 #FFFFFF;
+      box-shadow: inset -1px -1px 0 #404040, inset 1px 1px 0 #DFDFDF;
+      border-left: 6px solid var(--border-color);
+      transition: none;
+      overflow: hidden;
+    }
+    .node-card:hover { background: var(--bg-card-hover); }
+    .node-card.sev-normal { border-left-color: var(--status-normal); }
+    /* Stale nodes must never be mistaken for live ones. */
+    .node-card.sev-stale { border-left-color: var(--status-stale); opacity: 0.65; filter: grayscale(0.6); }
+    .pill-stale { background: var(--status-stale); color: #FFFFFF; }
+    .stale-note { font-family: var(--font-mono); font-size: 11px; color: #000000;
+                  background: #FFFFCC;
+                  padding: 8px 10px; border: 2px solid;
+                  border-color: #808080 #FFFFFF #FFFFFF #808080;
+                  margin-bottom: 10px; }
+    /* Layer 1 — the auditable part. Reasons are the payoff; show them plainly. */
+    .reason-block { margin-top: 10px; }
+    .reason-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: .05em;
+                    text-transform: uppercase; color: #000000; font-weight: 700; margin-bottom: 5px; }
+    .reason-list { margin: 0; padding-left: 18px; }
+    .reason-list li { font-size: 11.5px; line-height: 1.5; color: #000000; }
+    /* Layer 2 — advisory. Deliberately quieter than the Layer 1 decision. */
+    .advisory { margin-top: 10px; padding: 8px 10px;
+                background: #E8E8E8; border: 2px solid;
+                border-color: #808080 #FFFFFF #FFFFFF #808080; }
+    .advisory-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: .05em;
+                      text-transform: uppercase; color: #000000; font-weight: 700; cursor: help; }
+    .advisory .ml-lbl, .advisory .ml-val { opacity: 0.8; }
+    .ood-note { font-family: var(--font-mono); font-size: 10.5px; color: #000000;
+                background: #FFFF00; padding: 3px 6px; margin-top: 6px; display: inline-block; font-weight: 700; }
+    .regional-banner { display: none; margin: 0 0 14px 0; padding: 10px 14px;
+                       background: repeating-linear-gradient(45deg, #FFFF00, #FFFF00 10px, #000000 10px, #000000 20px);
+                       border: 2px solid #000;
+                       color: #FFFFFF; font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+                       text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
+    .node-card.sev-watch  { border-left-color: #CC9900; } /* yellow strip reads as gray on white; darken the accent strip only */
+    .node-card.sev-alert  { border-left-color: var(--status-alert); }
+
+    .card-header {
+      padding: 8px 10px;
+      background: linear-gradient(to right, var(--title-bar), var(--title-bar-end));
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .node-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #FFFFFF;
+    }
+    .node-id-sub {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: #FFFF00;
+      font-weight: 400;
+    }
+    .alert-pill {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 3px 9px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border: 2px solid;
+      border-color: #FFFFFF #808080 #808080 #FFFFFF;
+      color: #FFFFFF;
+    }
+    .pill-normal { background: var(--status-normal); }
+    .pill-watch  { background: #CC9900; color: #000000; }
+    .pill-alert  { background: var(--status-alert); }
+
+    /* PULSING ALERT DOT — hard blink, not a soft fade; matches the era */
+    @keyframes alertPulse {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: 0.15; }
+    }
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: #FFFF00;
+      animation: alertPulse 0.9s infinite step-end;
+    }
+
+    .card-body { padding: 14px; background: #FFFFFF; }
+
+    .sensor-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    @media (max-width: 460px) {
+      .sensor-grid { grid-template-columns: 1fr 1fr; }
+    }
+    .sensor-item {
+      background: #E8E8E8;
+      border: 2px solid;
+      border-color: #808080 #FFFFFF #FFFFFF #808080;
+      padding: 10px;
+    }
+    .sensor-lbl {
+      font-size: 10px;
+      color: #000000;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-bottom: 4px;
+      font-weight: 700;
+    }
+    .sensor-val {
+      font-size: 22px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: #000000;
+    }
+    .sensor-unit {
+      font-size: 11px;
+      color: #000000;
+      margin-left: 3px;
+      font-weight: 400;
+    }
+
+    /* ML PROBABILITY BARS */
+    .ml-section {
+      background: #E8E8E8;
+      border: 2px solid;
+      border-color: #808080 #FFFFFF #FFFFFF #808080;
+      padding: 10px;
+    }
+    .ml-title {
+      font-size: 10px;
+      color: #000000;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+    .ml-bars { display: flex; flex-direction: column; gap: 8px; }
+    .ml-bar-row {
+      display: grid;
+      grid-template-columns: 55px 1fr 35px;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+    }
+    .ml-lbl { color: #000000; font-size: 10px; }
+    .ml-track {
+      background: #FFFFFF;
+      border: 1px solid;
+      border-color: #808080 #FFFFFF #FFFFFF #808080;
+      height: 8px;
+      overflow: hidden;
+    }
+    .ml-fill { height: 100%; transition: none; }
+    .fill-n { background: var(--status-normal); }
+    .fill-w { background: #FFFF00; }
+    .fill-a { background: var(--status-alert); }
+    .ml-val { color: #000000; text-align: right; font-size: 10px; font-weight: 700; }
+
+    .card-footer {
+      padding: 8px 10px;
+      border-top: 2px solid;
+      border-color: #808080 #808080 #808080 #808080;
+      background: #C0C0C0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      color: #000000;
+      font-family: var(--font-mono);
+    }
+
+    /* RETRO BUTTONS — shared by alert-send-btn, sim-btn, and inline action buttons */
+    .alert-send-btn, .sim-btn, .retro-btn {
+      background: #C0C0C0;
+      border: 2px solid;
+      border-color: #FFFFFF #808080 #808080 #FFFFFF;
+      box-shadow: inset -1px -1px 0 #404040, inset 1px 1px 0 #DFDFDF;
+      color: #000000;
+      padding: 7px 14px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: var(--font-ui);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: none;
+    }
+    .alert-send-btn:hover, .sim-btn:hover, .retro-btn:hover { background: #D4D4D4; }
+    .alert-send-btn:active, .sim-btn:active, .retro-btn:active,
+    .sim-btn.active, .retro-btn.active {
+      border-color: #808080 #FFFFFF #FFFFFF #808080;
+      box-shadow: inset 1px 1px 0 #404040, inset -1px -1px 0 #DFDFDF;
+      transform: translate(1px, 1px);
+    }
+    .alert-send-btn:focus-visible, .sim-btn:focus-visible, .retro-btn:focus-visible,
+    .tab-btn:focus-visible, .retro-field:focus-visible {
+      outline: 2px dotted #000000;
+      outline-offset: 2px;
+    }
+    .retro-btn.accent, .sim-btn.accent { background: #0000FF; color: #FFFFFF; border-color: #5555FF #000080 #000080 #5555FF; }
+    .retro-btn.accent:hover, .sim-btn.accent:hover { background: #2222FF; }
+    .retro-btn.green, .sim-btn.green  { background: #00AA00; color: #FFFFFF; border-color: #55FF55 #006600 #006600 #55FF55; }
+    .retro-btn.green:hover, .sim-btn.green:hover  { background: #00C400; }
+    .retro-btn.amber, .sim-btn.amber  { background: #FFFF00; color: #000000; border-color: #FFFFAA #808000 #808000 #FFFFAA; }
+    .retro-btn.amber:hover, .sim-btn.amber:hover  { background: #FFFF66; }
+    .sim-btn.active { background: #FF0000; color: #FFFFFF; }
+    .retro-btn.block  { width: 100%; padding: 10px; font-size: 12px; }
+
+    /* RETRO FORM FIELDS — shared by all text/number/tel/url inputs and selects */
+    .retro-field {
+      width: 100%;
+      padding: 7px 9px;
+      background: #FFFFFF;
+      border: 2px solid;
+      border-color: #808080 #FFFFFF #FFFFFF #808080;
+      color: #000000;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .retro-field::placeholder { color: #808080; }
+    .retro-label {
+      display: block;
+      font-size: 10px;
+      font-weight: 700;
+      color: #000000;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      font-family: var(--font-mono);
+    }
+    .retro-hint { font-size: 10px; color: #000000; margin-top: 4px; }
+
+    /* CONTROL PANELS */
+    .control-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-top: 20px;
+    }
+    @media (max-width: 900px) {
+      .control-row { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .topology-container { grid-template-columns: 1fr !important; }
+      .risk-dashboard-grid { grid-template-columns: 1fr !important; }
+    }
+
+    .log-panel {
+      background: var(--bg-card);
+      border: 2px solid;
+      border-color: #FFFFFF #808080 #808080 #FFFFFF;
+      box-shadow: inset -1px -1px 0 #404040, inset 1px 1px 0 #DFDFDF;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .log-header {
+      padding: 8px 10px;
+      background: linear-gradient(to right, var(--title-bar), var(--title-bar-end));
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #FFFFFF;
+    }
+    .log-header button { color: #FFFF00; background: none; border: none; cursor: pointer; font-size: 11px; font-family: var(--font-ui); font-weight: 700; }
+    .panel-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 7px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      border: 1px solid #000000;
+      color: #000000;
+    }
+    .badge-amber { background: #FFFF00; }
+    .badge-green { background: #00FF00; }
+    .badge-cyan  { background: #00FFFF; }
+
+    .log-body {
+      padding: 10px;
+      height: 260px;
+      overflow-y: auto;
+      background: #FFFFFF;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .log-row {
+      display: flex;
+      gap: 10px;
+      padding: 3px 6px;
+    }
+    .log-row:nth-child(odd) { background: #E8E8E8; }
+    .log-time { color: #000000; }
+    .log-node { color: var(--accent); font-weight: 700; width: 110px; }
+    .log-msg { flex: 1; color: #000000; }
+    .log-msg.log-alert { color: var(--status-alert); font-weight: 700; }
+    .log-msg.log-watch { color: #806600; font-weight: 700; }
+
+    /* SIMULATION PANEL */
+    .sim-panel {
+      background: #FFFFCC;
+      border: 2px solid;
+      border-color: #FFFFFF #808080 #808080 #FFFFFF;
+      box-shadow: inset -1px -1px 0 #404040, inset 1px 1px 0 #DFDFDF;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+    }
+    .sim-controls {
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .sim-input-group { display: flex; flex-direction: column; gap: 4px; }
+    .sim-input-group label { font-size: 10px; font-weight: 700; color: #000000; text-transform: uppercase; font-family: var(--font-mono); }
+    .sim-input-group input { width: 90px; }
+
+    /* FLOOD RISK DASHBOARD TAB */
+    .risk-hero-card {
+      background: var(--bg-card);
+      border: 2px solid;
+      border-color: #FFFFFF #808080 #808080 #FFFFFF;
+      box-shadow: inset -1px -1px 0 #404040, inset 1px 1px 0 #DFDFDF;
+      padding: 20px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+    }
+    .risk-score-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .risk-number-box {
+      font-size: 52px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      line-height: 1;
+    }
+    .risk-verdict-title {
+      font-family: var(--font-head);
+      font-size: 18px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 6px;
+    }
+    .risk-verdict-desc {
+      font-size: 13px;
+      color: #000000;
+      max-width: 600px;
+      line-height: 1.5;
+    }
+
+    .risk-dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+
+    .risk-widget-card {
+      background: var(--bg-card);
+      border: 2px solid;
+      border-color: #FFFFFF #808080 #808080 #FFFFFF;
+      box-shadow: inset -1px -1px 0 #404040, inset 1px 1px 0 #DFDFDF;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .widget-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #000000;
+      font-family: var(--font-mono);
+    }
+
+    /* HEATMAP CHIPS */
+    .heatmap-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 10px;
+    }
+    .heatmap-chip {
+      background: #E8E8E8;
+      border: 2px solid;
+      border-color: #FFFFFF #808080 #808080 #FFFFFF;
+      padding: 9px;
+      cursor: pointer;
+      transition: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .heatmap-chip:hover { background: #D4D4D4; }
+    .heatmap-chip:active { border-color: #808080 #FFFFFF #FFFFFF #808080; transform: translate(1px, 1px); }
+    .chip-name { font-size: 11px; font-weight: 700; color: #000000; text-transform: uppercase; }
+    .chip-prob { font-size: 16px; font-weight: 700; font-family: var(--font-mono); }
+
+    /* FACTOR BARS */
+    .factor-list { display: flex; flex-direction: column; gap: 12px; }
+    .factor-item { display: flex; flex-direction: column; gap: 4px; }
+    .factor-meta { display: flex; justify-content: space-between; font-size: 11px; font-family: var(--font-mono); }
+    .factor-track { height: 10px; background: #FFFFFF; border: 1px solid; border-color: #808080 #FFFFFF #FFFFFF #808080; overflow: hidden; }
+    .factor-fill { height: 100%; transition: none; }
+
+    /* TOAST */
+    #toast {
+      position: fixed; bottom: 20px; right: 20px;
+      background: #C0C0C0; color: #000000;
+      border: 2px solid;
+      border-color: #FFFFFF #808080 #808080 #FFFFFF;
+      box-shadow: inset -1px -1px 0 #404040, inset 1px 1px 0 #DFDFDF;
+      padding: 12px 16px;
+      font-size: 12px; font-family: var(--font-mono); font-weight: 700;
+      z-index: 9999; opacity: 0;
+      transition: none;
+      max-width: 340px; border-left: 6px solid var(--accent);
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+    #toast.toast-ok { border-left-color: var(--status-normal); }
+    #toast.toast-err { border-left-color: var(--status-alert); }
+    #toast.toast-warn { border-left-color: #CC9900; }
+
+    /* TOPOLOGY / WOKWI TABS */
+    /* Wokwi is the main attraction on this tab — the live hardware sim is
+       what a viewer actually wants to see move. The architecture diagram is
+       reference material, so it gets the narrower column. */
+    .topology-container {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+    .wokwi-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+    .wokwi-tab-btn {
+      background: #C0C0C0; border: 2px solid;
+      border-color: #FFFFFF #808080 #808080 #FFFFFF;
+      box-shadow: inset -1px -1px 0 #404040, inset 1px 1px 0 #DFDFDF;
+      color: #000000; padding: 5px 11px;
+      font-size: 11px; font-weight: 700; cursor: pointer; font-family: var(--font-mono);
+    }
+    .wokwi-tab-btn.active {
+      border-color: #808080 #FFFFFF #FFFFFF #808080;
+      box-shadow: inset 1px 1px 0 #404040, inset -1px -1px 0 #DFDFDF;
+      transform: translate(1px, 1px);
+    }
+    .wokwi-node-panel { display: none; height: 640px; flex-direction: column; gap: 10px; }
+    .wokwi-node-panel.active { display: flex; }
+    .wokwi-placeholder {
+      height: 100%; border: 2px solid; border-color: #808080 #FFFFFF #FFFFFF #808080;
+      background: #FFFFFF;
+      display: flex; align-items: center; justify-content: center;
+      color: #000000; font-size: 13px; text-align: center; padding: 20px; font-family: var(--font-mono);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 12h4l3-9 5 18 3-9h5"/>
+      </svg>
+      <div>
+        <div class="brand-title">TrueFlood</div>
+        <div class="brand-subtitle">Command Center</div>
+      </div>
+    </div>
+
+    <div class="tabs-nav">
+      <button class="tab-btn active" onclick="switchTab('live', this)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+        Live Telemetry
+      </button>
+      <button class="tab-btn" onclick="switchTab('risk', this)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        Flood Risk Analytics
+      </button>
+      <button class="tab-btn" onclick="switchTab('topology', this)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+        System Topology
+      </button>
+      <button class="tab-btn" onclick="switchTab('analytics', this)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Historical Analytics
+      </button>
+    </div>
+
+    <div class="header-controls">
+      <div id="mqttStatus" class="status-badge error">
+        <div class="status-dot"></div>
+        <span id="mqttLabel">Disconnected</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast"></div>
+
+    <!-- SIMULATION OVERRIDE PANEL -->
+    <div id="demoPanel" class="sim-panel" style="display:none;">
+      <div style="display:flex; align-items:center; gap:8px; font-weight:700; font-size:13px; color:#000000; margin-bottom:4px; font-family:var(--font-mono);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0000FF" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        DEVELOPER SIMULATION MODE
+      </div>
+      <div style="font-size:12px; color:#000000; margin-bottom:12px;">Generate N sensor nodes across different named regions with realistic, correlated values. ML predictions update as each node drifts.</div>
+      <div class="sim-controls">
+        <div class="sim-input-group">
+          <label for="nodeCount">Number of Nodes</label>
+          <input type="number" id="nodeCount" class="retro-field" min="1" max="20" value="6">
+        </div>
+        <button id="generateNodesBtn" class="sim-btn green" onclick="generateRandomNodes()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Generate Random Nodes
+        </button>
+        <button id="autoSimBtn" class="sim-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Start Auto-Simulation
+        </button>
+      </div>
+      <div id="simStatus" style="font-size:11px; color:#000000; margin-top:10px; font-family:var(--font-mono); font-weight:700;"></div>
+    </div>
+
+    <!-- TAB: LIVE TELEMETRY -->
+    <div id="tab-live" class="tab-content active">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-title">Active Stations</div>
+          <div class="stat-val val-accent" id="sumNodes">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">Critical Alerts</div>
+          <div class="stat-val val-alert" id="sumAlert">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">Watch Status</div>
+          <div class="stat-val val-watch" id="sumWatch">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">Total Packets</div>
+          <div class="stat-val" id="sumMessages">0</div>
+        </div>
+      </div>
+
+      <div id="regionalBanner" class="regional-banner"></div>
+      <div class="node-grid" id="nodeGrid">
+        <!-- Dynamic Node Cards -->
+      </div>
+
+      <div class="control-row">
+        <!-- Event Log -->
+        <div class="log-panel">
+          <div class="log-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="panel-badge badge-cyan">LOG</span>
+              System Event Log
+            </div>
+            <button onclick="clearLog()">Clear</button>
+          </div>
+          <div class="log-body" id="eventLog">
+            <div class="log-row">
+              <span class="log-time">--:--:--</span>
+              <span class="log-node">system</span>
+              <span class="log-msg">Dashboard initialized. Waiting for telemetry...</span>
+            </div>
+          </div>
+          <div style="padding:10px 16px; border-top:2px solid; border-color:#808080 #FFFFFF #FFFFFF #808080;">
+            <button class="alert-send-btn" onclick="toggleAlertLog()">Why did this fire? &mdash; alert delivery log</button>
+            <div id="alertLogBox" class="log-body" style="display:none; margin-top:10px;">
+              <div id="alertLogBody"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Stack: Manual Inject + Alert Delivery -->
+        <div style="display:flex; flex-direction:column; gap:20px;">
+          <!-- Manual Inject -->
+          <div class="log-panel">
+            <div class="log-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="panel-badge badge-amber">INJECT</span>
+                Manual Telemetry Inject
+              </div>
+            </div>
+            <div style="padding:16px; font-size:13px; display:flex; flex-direction:column; gap:10px;">
+              <div class="retro-hint" style="line-height:1.5;">
+                Defaults below are a calm baseline. All 5 fields feed the model together —
+                for a realistic ALERT, raise at least 2 at once (e.g. water level &ge;3.0m
+                AND rainfall &ge;120mm). See <code>firmware/NODES_SETUP.md</code> for the full table.
+              </div>
+              <div>
+                <label class="retro-label">NODE ID</label>
+                <input type="text" id="manualNodeId" class="retro-field" value="manual-1">
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div>
+                  <label class="retro-label">WATER LVL (m)</label>
+                  <input type="number" id="manualWL" class="retro-field" value="0.6" step="0.1">
+                </div>
+                <div>
+                  <label class="retro-label">RAIN (mm)</label>
+                  <input type="number" id="manualRain" class="retro-field" value="8.0" step="1">
+                </div>
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+                <div>
+                  <label class="retro-label">SOIL %</label>
+                  <input type="number" id="manualSoil" class="retro-field" value="42" step="1">
+                </div>
+                <div>
+                  <label class="retro-label">HUMIDITY %</label>
+                  <input type="number" id="manualHum" class="retro-field" value="55" step="1">
+                </div>
+                <div>
+                  <label class="retro-label">TREND hPa/hr</label>
+                  <input type="number" id="manualTrend" class="retro-field" value="0" step="0.1">
+                </div>
+              </div>
+              <div>
+                <label class="retro-label">PRESSURE (hPa) &mdash; falling = storm precursor</label>
+                <input type="number" id="manualPressure" class="retro-field" value="1015" step="1">
+              </div>
+              <button onclick="submitManualTelemetry()" class="retro-btn amber block">
+                Inject &amp; Trigger ML
+              </button>
+            </div>
+          </div>
+
+          <!-- Alert Delivery -->
+          <div class="log-panel">
+            <div class="log-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="panel-badge badge-green">ALERT</span>
+                WhatsApp Alert Delivery
+              </div>
+            </div>
+            <div style="padding:16px; font-size:13px; display:flex; flex-direction:column; gap:10px;">
+              <div>
+                <label class="retro-label">WHATSAPP NUMBER</label>
+                <input type="tel" id="alertPhone" class="retro-field" placeholder="+919876543210"
+                  oninput="localStorage.setItem('tf_alert_phone',this.value)">
+                <div class="retro-hint">Send 'join &lt;code&gt;' to +1 415 523 8886 on WhatsApp first for sandbox delivery.</div>
+              </div>
+              <div>
+                <label class="retro-label">TARGET NODE</label>
+                <select id="alertNodeSelect" class="retro-field">
+                  <option value="">-- no nodes available --</option>
+                </select>
+              </div>
+              <button onclick="sendAlertNow()" class="retro-btn green block">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.56 3.44 2 2 0 0 1 3.53 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.69a16 16 0 0 0 6.09 6.09l.86-.87a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92z"/></svg>
+                Send WhatsApp Alert
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: FLOOD RISK ANALYTICS -->
+    <div id="tab-risk" class="tab-content">
+      <!-- Hero Verdict Card -->
+      <div class="risk-hero-card">
+        <div class="risk-score-wrapper">
+          <div id="riskScoreNum" class="risk-number-box val-accent">0</div>
+          <div>
+            <div id="riskVerdictTitle" class="risk-verdict-title" style="color:var(--status-normal);">SYSTEM STABLE</div>
+            <div id="riskVerdictDesc" class="risk-verdict-desc">Awaiting telemetry inputs to generate composite risk score...</div>
+          </div>
+        </div>
+        <!-- Semicircular SVG Gauge -->
+        <div style="position:relative; width:160px; height:90px;">
+          <svg viewBox="0 0 100 55" width="160" height="90">
+            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#808080" stroke-width="8"/>
+            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="url(#riskGrad)" stroke-width="8"/>
+            <defs>
+              <linearGradient id="riskGrad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#00AA00"/>
+                <stop offset="50%" stop-color="#FFFF00"/>
+                <stop offset="100%" stop-color="#FF0000"/>
+              </linearGradient>
+            </defs>
+            <g id="gaugeNeedleGroup" style="transform-origin: 50px 50px; transform: rotate(-90deg); transition: transform 0.4s linear;">
+              <line x1="50" y1="50" x2="50" y2="18" stroke="#000000" stroke-width="3"/>
+              <circle cx="50" cy="50" r="5" fill="#000000"/>
+            </g>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Risk Dashboard Grid -->
+      <div class="risk-dashboard-grid">
+        <!-- Node Risk Heatmap Grid -->
+        <div class="risk-widget-card">
+          <div class="widget-title">Node Risk Heatmap (Click to inspect card)</div>
+          <div class="heatmap-grid" id="riskHeatmap">
+            <div style="font-size:12px; color:#000000;">No active nodes.</div>
+          </div>
+        </div>
+
+        <!-- Contributing Factors Breakdown -->
+        <div class="risk-widget-card">
+          <div class="widget-title" id="riskFactorsTitle">Top Risk Driver Metric Factors</div>
+          <div class="factor-list" id="riskFactorsList">
+            <div style="font-size:12px; color:#000000;">Awaiting telemetry data...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Composite Risk Trend Line Chart -->
+      <div class="risk-widget-card">
+        <div class="widget-title">Composite Risk Score Trend (Last 20 Samples)</div>
+        <div style="position:relative; height:240px; width:100%;">
+          <canvas id="riskTrendChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: TOPOLOGY -->
+    <div id="tab-topology" class="tab-content">
+      <div class="topology-container">
+        <div class="log-panel" style="padding:16px;">
+          <div class="widget-title" style="margin-bottom:6px;">Wokwi Hardware Simulators</div>
+          <div style="font-size:11px; color:#000000; margin-bottom:14px; line-height:1.5; font-family:var(--font-mono);">
+            Each node simulates 5 sensors: HC-SR04 for water level, potentiometers for rainfall and soil saturation,
+            BMP180 for barometric pressure trend, DHT22 for humidity — plus LCD, tri-color LEDs and buzzer for local
+            alerting. Every part is labeled on-canvas. Run up to 4 tabs simultaneously, each publishing under its own
+            NODE_ID. Load <code>firmware/diagram_node&lt;N&gt;.json</code> and <code>firmware/sketch.ino</code> per node —
+            see <code>firmware/NODES_SETUP.md</code> for the full sensor map.
+            <br><br>
+            <strong>Note:</strong> the share URLs below still point at whatever diagram you last saved in Wokwi. After
+            pasting the refreshed <code>diagram.json</code>, re-save each project and update its URL here — otherwise
+            the embed keeps rendering the old hardware.
+          </div>
+          <div class="wokwi-tabs">
+            <button class="wokwi-tab-btn active" onclick="switchWokwiTab(1,this)">Node 1</button>
+            <button class="wokwi-tab-btn" onclick="switchWokwiTab(2,this)">Node 2</button>
+            <button class="wokwi-tab-btn" onclick="switchWokwiTab(3,this)">Node 3</button>
+            <button class="wokwi-tab-btn" onclick="switchWokwiTab(4,this)">Node 4</button>
+          </div>
+          <div id="wokwi-n1" class="wokwi-node-panel active"></div>
+          <div id="wokwi-n2" class="wokwi-node-panel"></div>
+          <div id="wokwi-n3" class="wokwi-node-panel"></div>
+          <div id="wokwi-n4" class="wokwi-node-panel"></div>
+        </div>
+
+        <div class="log-panel" style="padding:16px;">
+          <div class="widget-title" style="margin-bottom:12px;">System Architecture Blueprint</div>
+          <div style="flex:1; width:100%; background:#FFFFFF; border:2px solid; border-color:#808080 #FFFFFF #FFFFFF #808080; padding:6px;">
+            <svg viewBox="0 0 780 440" width="100%" height="100%">
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#000000" />
+                </marker>
+              </defs>
+
+              <!-- ESP32 sensor nodes -->
+              <rect x="20" y="30" width="130" height="60" fill="#C0C0C0" stroke="#000000" stroke-width="1.5"/>
+              <text x="85" y="55" fill="#000000" font-family="Courier New" font-size="12" font-weight="bold" text-anchor="middle">ESP32 Node 1</text>
+              <text x="85" y="72" fill="#000000" font-family="Courier New" font-size="9" text-anchor="middle">5 sensors + local alerting</text>
+
+              <rect x="20" y="110" width="130" height="60" fill="#C0C0C0" stroke="#000000" stroke-width="1.5"/>
+              <text x="85" y="135" fill="#000000" font-family="Courier New" font-size="12" font-weight="bold" text-anchor="middle">ESP32 Node 2</text>
+              <text x="85" y="152" fill="#000000" font-family="Courier New" font-size="9" text-anchor="middle">5 sensors + local alerting</text>
+
+              <rect x="20" y="190" width="130" height="60" fill="#C0C0C0" stroke="#000000" stroke-width="1.5"/>
+              <text x="85" y="215" fill="#000000" font-family="Courier New" font-size="12" font-weight="bold" text-anchor="middle">ESP32 Node N</text>
+              <text x="85" y="232" fill="#000000" font-family="Courier New" font-size="9" text-anchor="middle">up to 4, Wokwi sim</text>
+
+              <text x="85" y="278" fill="#000000" font-family="Courier New" font-size="9" text-anchor="middle">MQTT flood/sensor/&lt;id&gt;</text>
+              <text x="85" y="290" fill="#000000" font-family="Courier New" font-size="9" text-anchor="middle">every 5s + LWT status</text>
+
+              <!-- MQTT broker -->
+              <rect x="190" y="100" width="110" height="80" fill="#FFFFCC" stroke="#000000" stroke-width="1.5"/>
+              <text x="245" y="130" fill="#000000" font-family="Courier New" font-size="12" font-weight="bold" text-anchor="middle">MQTT Broker</text>
+              <text x="245" y="146" fill="#000000" font-family="Courier New" font-size="9" text-anchor="middle">HiveMQ (private,</text>
+              <text x="245" y="158" fill="#000000" font-family="Courier New" font-size="9" text-anchor="middle">authenticated)</text>
+
+              <!-- Backend bridge: three-layer decision path -->
+              <rect x="360" y="20" width="230" height="300" fill="#C0C0C0" stroke="#000000" stroke-width="2"/>
+              <rect x="360" y="20" width="230" height="22" fill="#000080"/>
+              <text x="475" y="35" fill="#FFFFFF" font-family="MS Sans Serif" font-size="11" font-weight="bold" text-anchor="middle">FLASK + PAHO BRIDGE</text>
+
+              <rect x="374" y="56" width="202" height="66" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+              <text x="475" y="76" fill="#000000" font-family="Courier New" font-size="10" font-weight="bold" text-anchor="middle">LAYER 1 — SAFETY RULES</text>
+              <text x="475" y="90" fill="#000000" font-family="Courier New" font-size="8.5" text-anchor="middle">thresholds + hysteresis +</text>
+              <text x="475" y="102" fill="#000000" font-family="Courier New" font-size="8.5" text-anchor="middle">corroboration — FIRES ALARMS</text>
+
+              <rect x="374" y="132" width="202" height="66" fill="#E8E8E8" stroke="#000000" stroke-width="1.5"/>
+              <text x="475" y="152" fill="#000000" font-family="Courier New" font-size="10" font-weight="bold" text-anchor="middle">LAYER 2 — ML FORECAST</text>
+              <text x="475" y="166" fill="#000000" font-family="Courier New" font-size="8.5" text-anchor="middle">Random Forest, benchmarked</text>
+              <text x="475" y="178" fill="#000000" font-family="Courier New" font-size="8.5" text-anchor="middle">vs baseline — advisory only</text>
+
+              <rect x="374" y="208" width="202" height="66" fill="#E8E8E8" stroke="#000000" stroke-width="1.5"/>
+              <text x="475" y="228" fill="#000000" font-family="Courier New" font-size="10" font-weight="bold" text-anchor="middle">LAYER 3 — WEATHER FUSION</text>
+              <text x="475" y="242" fill="#000000" font-family="Courier New" font-size="8.5" text-anchor="middle">Open-Meteo forecast rain —</text>
+              <text x="475" y="254" fill="#000000" font-family="Courier New" font-size="8.5" text-anchor="middle">adds a reason, never a veto</text>
+
+              <text x="475" y="298" fill="#000000" font-family="Courier New" font-size="9" text-anchor="middle">only Layer 1 decides status</text>
+
+              <!-- Outputs -->
+              <rect x="640" y="20" width="120" height="60" fill="#C0C0C0" stroke="#000000" stroke-width="1.5"/>
+              <text x="700" y="44" fill="#000000" font-family="Courier New" font-size="11" font-weight="bold" text-anchor="middle">SQLite + REST</text>
+              <text x="700" y="60" fill="#000000" font-family="Courier New" font-size="9" text-anchor="middle">WAL, indexed</text>
+
+              <rect x="640" y="100" width="120" height="60" fill="#C0C0C0" stroke="#000000" stroke-width="1.5"/>
+              <text x="700" y="124" fill="#000000" font-family="Courier New" font-size="11" font-weight="bold" text-anchor="middle">Dashboard</text>
+              <text x="700" y="140" fill="#000000" font-family="Courier New" font-size="9" text-anchor="middle">this page</text>
+
+              <rect x="640" y="180" width="120" height="80" fill="#FFFFCC" stroke="#000000" stroke-width="1.5"/>
+              <text x="700" y="205" fill="#000000" font-family="Courier New" font-size="11" font-weight="bold" text-anchor="middle">Twilio</text>
+              <text x="700" y="221" fill="#000000" font-family="Courier New" font-size="9" text-anchor="middle">WhatsApp, then</text>
+              <text x="700" y="233" fill="#000000" font-family="Courier New" font-size="9" text-anchor="middle">SMS fallback</text>
+              <text x="700" y="249" fill="#000000" font-family="Courier New" font-size="8" text-anchor="middle">key + allowlist + budget</text>
+
+              <!-- Arrows -->
+              <path d="M 150 60 L 185 130" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)"/>
+              <path d="M 150 140 L 185 145" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)"/>
+              <path d="M 150 220 L 185 165" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)"/>
+              <path d="M 300 140 L 355 140" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)"/>
+              <path d="M 590 55 L 635 50" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)"/>
+              <path d="M 590 165 L 635 130" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)"/>
+              <path d="M 590 100 L 635 220" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: HISTORICAL ANALYTICS -->
+    <div id="tab-analytics" class="tab-content">
+      <div class="risk-widget-card" style="height:540px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <div class="widget-title">Historical Water Level &amp; ML Forecast</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <label class="retro-label" style="margin:0;">NODE</label>
+            <select id="analyticsNodeSelect" class="retro-field" style="width:180px;" onchange="loadNodeHistory()">
+              <option value="">-- no nodes available --</option>
+            </select>
+          </div>
+        </div>
+        <div class="retro-hint" style="line-height:1.5;">
+          Solid line: actual telemetry, oldest to newest. Dashed marker: Layer 2's current forecast —
+          water level is mapped from its NORMAL/WATCH/ALERT probabilities onto the SafetyRules bands
+          purely to plot it alongside history; it is advisory, not a measured reading, and never drives an alarm.
+        </div>
+        <div style="position:relative; height:calc(100% - 74px); width:100%;">
+          <canvas id="historyChartWL"></canvas>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ═══════════════════════════════════════════════════════
+    // CONFIG & STATE
+    // ═══════════════════════════════════════════════════════
+    const BROKER_WSS = "wss://broker.hivemq.com:8884/mqtt";
+    const CLIENT_ID  = "dashboard-pro-" + Math.random().toString(16).slice(2, 10);
+    const TOPIC_IN   = "flood/alert/+";
+    const BACKEND_URL = window.PRODUCTION_BACKEND_URL || (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'http://localhost:8080' : 'https://floodsense-backend.onrender.com');
+
+    // Default Wokwi project URLs for initial embed state
+    const DEFAULT_WOKWI_URLS = [
+      "https://wokwi.com/projects/322577683855704658",
+      "", "", ""
+    ];
+
+    const nodeData = {};
+    const backendState = {};     // node_id -> annotated node from GET /api/nodes
+    let msgCount = 0;
+    let mainChart = null;
+    let riskChart = null;
+    let generatedNodes = [];
+    let simInterval = null;
+    let riskHistory = [];
+
+    const DEMO_MODE = new URLSearchParams(location.search).get("demo") === "1";
+    if (DEMO_MODE) document.getElementById("demoPanel").style.display = "block";
+
+    // ── TOAST NOTIFICATIONS ──
+    let _toastTimer = null;
+    function showToast(msg, type = 'ok') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = `show toast-${type}`;
+      clearTimeout(_toastTimer);
+      _toastTimer = setTimeout(() => { t.className = ''; }, 4000);
+    }
+
+    // ── TAB SWITCHING ──
+    function switchTab(tabId, btn) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      (btn || event.currentTarget).classList.add('active');
+      document.getElementById('tab-' + tabId).classList.add('active');
+
+      if (tabId === 'analytics') loadNodeHistory();
+      if (tabId === 'risk') updateRiskDashboard();
+    }
+
+    // ── LOGGER ──
+    function logEvent(node, msg, level) {
+      const logEl = document.getElementById("eventLog");
+      const row = document.createElement("div");
+      row.className = "log-row";
+      const time = new Date().toLocaleTimeString("en-GB");
+      let cls = "";
+      if (level === "ALERT") cls = "log-alert";
+      else if (level === "WATCH") cls = "log-watch";
+      row.innerHTML = `<span class="log-time">${time}</span><span class="log-node">${node}</span><span class="log-msg ${cls}">${msg}</span>`;
+      logEl.prepend(row);
+      if (logEl.children.length > 50) logEl.removeChild(logEl.lastChild);
+    }
+    function clearLog() { document.getElementById("eventLog").innerHTML = ""; }
+
+    // ── NODE SELECT REFRESH (alert target + analytics) ──
+    function refreshAlertNodeSelect() {
+      const ids = Object.keys(nodeData);
+      for (const selId of ['alertNodeSelect', 'analyticsNodeSelect']) {
+        const sel = document.getElementById(selId);
+        if (!sel) continue;
+        const prev = sel.value;
+        sel.innerHTML = ids.length
+          ? ids.map(id => `<option value="${id}">${id}</option>`).join('')
+          : '<option value="">-- no nodes available --</option>';
+        if (prev && nodeData[prev]) sel.value = prev;
+      }
+    }
+
+    function prefillAndSendAlert(nodeId) {
+      const sel = document.getElementById('alertNodeSelect');
+      sel.value = nodeId;
+      sendAlertNow();
+    }
+
+    function scrollToNodeCard(nodeId) {
+      switchTab('live', document.querySelectorAll('.tab-btn')[0]);
+      setTimeout(() => {
+        const card = document.getElementById("card-" + nodeId);
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+    }
+
+    // ── RENDER LIVE NODE CARD ──
+    function renderNodeCard(nodeId, data) {
+      const grid = document.getElementById("nodeGrid");
+      let card = document.getElementById("card-" + nodeId);
+
+      // Merge the backend's annotated view (staleness, Layer 1 reasons, Layer 2
+      // advisory) over whatever arrived on MQTT.
+      const be = backendState[nodeId] || {};
+      data = { ...data, ...be };
+
+      const advisory = data.forecast_advisory || null;
+      const prob = (advisory && advisory.probabilities) || data.probabilities ||
+                   { NORMAL: 0, WATCH: 0, ALERT: 0 };
+      const isStale = data.stale === true;
+      const alertLvl = data.alert_level || "NORMAL";
+      const isAlert = !isStale && alertLvl === "ALERT";
+      const isWatch = !isStale && alertLvl === "WATCH";
+      const pillCls = isStale ? "pill-stale" : isAlert ? "pill-alert" : isWatch ? "pill-watch" : "pill-normal";
+      const sevCls  = isStale ? "sev-stale"  : isAlert ? "sev-alert"  : isWatch ? "sev-watch"  : "sev-normal";
+      const age = data.seconds_since_update;
+      const ageTxt = age == null ? "unknown" :
+                     age < 90 ? `${Math.round(age)}s ago` : `${Math.round(age / 60)}m ago`;
+      const reasons = Array.isArray(data.reasons) ? data.reasons : [];
+      const ood = Array.isArray(data.ood_features) ? data.ood_features : [];
+
+      if (!card) {
+        card = document.createElement("div");
+        card.id = "card-" + nodeId;
+        grid.appendChild(card);
+      }
+      card.className = `node-card ${sevCls}`;
+
+      card.innerHTML = `
+        <div class="card-header">
+          <div class="node-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <div>
+              ${(data.node_label || nodeId).toUpperCase()}
+              <div class="node-id-sub">ID: ${nodeId}</div>
+            </div>
+          </div>
+          <div class="alert-pill ${pillCls}">
+            ${isAlert ? '<span class="pulse-dot"></span>' : ''}
+            ${isStale ? "NO DATA" : alertLvl}
+          </div>
+        </div>
+        <div class="card-body">
+          ${isStale ? `<div class="stale-note">NO DATA &mdash; last seen ${ageTxt}. Values below are the last known reading, not the current state.</div>` : ''}
+          <div class="sensor-grid">
+            <div class="sensor-item">
+              <div class="sensor-lbl">Water Level</div>
+              <div class="sensor-val">${(data.water_level_m||0).toFixed(2)}<span class="sensor-unit">m</span></div>
+            </div>
+            <div class="sensor-item">
+              <div class="sensor-lbl">Rainfall (24h)</div>
+              <div class="sensor-val">${(data.rainfall_24h_mm||0).toFixed(0)}<span class="sensor-unit">mm</span></div>
+            </div>
+            <div class="sensor-item">
+              <div class="sensor-lbl">Soil Moisture</div>
+              <div class="sensor-val">${(data.soil_moisture_pct||0).toFixed(0)}<span class="sensor-unit">%</span></div>
+            </div>
+            <div class="sensor-item">
+              <div class="sensor-lbl">Pressure</div>
+              <div class="sensor-val">${data.pressure_hpa!=null?data.pressure_hpa.toFixed(0):'&mdash;'}<span class="sensor-unit">hPa</span></div>
+              ${data.pressure_trend_hpa_per_hr!=null ? `<div style="font-size:10px; font-family:var(--font-mono); margin-top:2px; color:${data.pressure_trend_hpa_per_hr<=-1?'#CC0000':'#000000'};">${data.pressure_trend_hpa_per_hr<=0?'&#9660;':'&#9650;'} ${Math.abs(data.pressure_trend_hpa_per_hr).toFixed(1)}/h</div>` : ''}
+            </div>
+            <div class="sensor-item">
+              <div class="sensor-lbl">Temp / Humidity</div>
+              <div class="sensor-val" style="font-size:16px;">${data.temperature_c!=null?data.temperature_c.toFixed(0)+'&deg;C':'&mdash;'} <span class="sensor-unit">/ ${data.humidity_pct!=null?data.humidity_pct.toFixed(0)+'%':'&mdash;'}</span></div>
+            </div>
+          </div>
+          <div class="reason-block">
+            <div class="reason-title">Why (Layer 1 safety rules)</div>
+            <ul class="reason-list">
+              ${(reasons.length ? reasons : ["awaiting backend evaluation"]).map(r => `<li>${r}</li>`).join("")}
+            </ul>
+          </div>
+          <div class="advisory">
+            <div class="advisory-title" title="Layer 2 is a machine-learning forecast trained on synthetic data. It is reported for context only and never drives an alarm — alarms come from the Layer 1 rules above.">ML forecast (advisory) &#9432;</div>
+            <div class="ml-bars">
+              <div class="ml-bar-row">
+                <span class="ml-lbl">NORMAL</span>
+                <div class="ml-track"><div class="ml-fill fill-n" style="width:${((prob.NORMAL||0)*100).toFixed(0)}%"></div></div>
+                <span class="ml-val">${((prob.NORMAL||0)*100).toFixed(0)}%</span>
+              </div>
+              <div class="ml-bar-row">
+                <span class="ml-lbl">WATCH</span>
+                <div class="ml-track"><div class="ml-fill fill-w" style="width:${((prob.WATCH||0)*100).toFixed(0)}%"></div></div>
+                <span class="ml-val">${((prob.WATCH||0)*100).toFixed(0)}%</span>
+              </div>
+              <div class="ml-bar-row">
+                <span class="ml-lbl">ALERT</span>
+                <div class="ml-track"><div class="ml-fill fill-a" style="width:${((prob.ALERT||0)*100).toFixed(0)}%"></div></div>
+                <span class="ml-val">${((prob.ALERT||0)*100).toFixed(0)}%</span>
+              </div>
+            </div>
+            ${ood.length ? `<div class="ood-note">Out of training range: ${ood.join("; ")}</div>` : ''}
+          </div>
+        </div>
+        <div class="card-footer">
+          <span>UPDATED &bull; ${isStale ? ageTxt : (data.timestamp || new Date().toLocaleTimeString("en-GB"))}</span>
+          <button class="alert-send-btn" onclick="prefillAndSendAlert('${nodeId}')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.56 3.44 2 2 0 0 1 3.53 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.69a16 16 0 0 0 6.09 6.09l.86-.87a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92z"/></svg>
+            Alert
+          </button>
+        </div>`;
+
+      refreshAlertNodeSelect();
+    }
+
+    // ── SUMMARY & COMPOSITE RISK CALCULATION ──
+    function computeCompositeRisk(nodeData) {
+      const nodes = Object.values(nodeData);
+      if (!nodes.length) return { score: 0, level: "NO DATA", topNode: null, maxAlert: 0 };
+
+      const alertProbs = nodes.map(n => n.probabilities?.ALERT ?? (n.alert_level === 'ALERT' ? 0.9 : 0.05));
+      const watchProbs = nodes.map(n => n.probabilities?.WATCH ?? (n.alert_level === 'WATCH' ? 0.6 : 0.1));
+      const maxAlert = Math.max(...alertProbs);
+      const avgAlert = alertProbs.reduce((a,b) => a+b, 0) / nodes.length;
+      const avgWatch = watchProbs.reduce((a,b) => a+b, 0) / nodes.length;
+
+      const score = Math.round(Math.min(100, (maxAlert * 0.7 + avgAlert * 0.2 + avgWatch * 0.1) * 100));
+      const level = score >= 70 ? "FLOOD LIKELY" : score >= 35 ? "ELEVATED WATCH" : "SYSTEM STABLE";
+      const topNodeId = nodes[alertProbs.indexOf(maxAlert)]?.node_id;
+      return { score, level, topNode: topNodeId, maxAlert };
+    }
+
+    function updateSummary() {
+      const nodes = Object.values(nodeData);
+      document.getElementById("sumNodes").textContent = nodes.length;
+      document.getElementById("sumAlert").textContent = nodes.filter(n => n.alert_level === "ALERT").length;
+      document.getElementById("sumWatch").textContent = nodes.filter(n => n.alert_level === "WATCH").length;
+      document.getElementById("sumMessages").textContent = msgCount;
+
+      updateRiskDashboard();
+    }
+
+    // ── UPDATE FLOOD RISK ANALYTICS TAB ──
+    function updateRiskDashboard() {
+      const risk = computeCompositeRisk(nodeData);
+      const scoreNum = document.getElementById("riskScoreNum");
+      const titleEl = document.getElementById("riskVerdictTitle");
+      const descEl = document.getElementById("riskVerdictDesc");
+
+      scoreNum.textContent = risk.score;
+      scoreNum.className = `risk-number-box ${risk.score >= 70 ? 'val-alert' : risk.score >= 35 ? 'val-watch' : 'val-accent'}`;
+      titleEl.textContent = risk.level;
+      titleEl.style.color = risk.score >= 70 ? 'var(--status-alert)' : risk.score >= 35 ? 'var(--status-watch-text)' : 'var(--status-normal)';
+
+      if (risk.topNode && nodeData[risk.topNode]) {
+        const top = nodeData[risk.topNode];
+        const alertProbPct = Math.round((top.probabilities?.ALERT || (top.alert_level === 'ALERT' ? 0.9 : 0.05)) * 100);
+        descEl.textContent = `Driven by ${top.node_label || top.node_id} — ${alertProbPct}% ALERT probability, water level ${(top.water_level_m || 0).toFixed(1)}m, rainfall ${(top.rainfall_24h_mm || 0).toFixed(1)}mm.`;
+      } else {
+        descEl.textContent = "All station readings are currently within normal baseline thresholds.";
+      }
+
+      // Rotate Gauge Needle (-90deg to +90deg)
+      const needleAngle = -90 + (risk.score / 100) * 180;
+      document.getElementById("gaugeNeedleGroup").style.transform = `rotate(${needleAngle}deg)`;
+
+      // Render Heatmap Chips
+      const heatmapEl = document.getElementById("riskHeatmap");
+      const nodes = Object.values(nodeData);
+      if (nodes.length) {
+        heatmapEl.innerHTML = nodes.map(n => {
+          const probA = Math.round((n.probabilities?.ALERT || (n.alert_level === 'ALERT' ? 0.9 : 0.05)) * 100);
+          const color = probA >= 70 ? 'var(--status-alert)' : probA >= 35 ? 'var(--status-watch-text)' : 'var(--status-normal)';
+          return `
+            <div class="heatmap-chip" onclick="scrollToNodeCard('${n.node_id}')">
+              <div class="chip-name">${(n.node_label || n.node_id).substring(0, 15)}</div>
+              <div class="chip-prob" style="color:${color}">${probA}%</div>
+            </div>`;
+        }).join('');
+      } else {
+        heatmapEl.innerHTML = '<div style="font-size:12px; color:var(--text-muted);">No telemetry received.</div>';
+      }
+
+      // Render Factors Breakdown
+      const factorsEl = document.getElementById("riskFactorsList");
+      if (risk.topNode && nodeData[risk.topNode]) {
+        const top = nodeData[risk.topNode];
+        document.getElementById("riskFactorsTitle").textContent = `Top Driver Factors (${top.node_label || top.node_id})`;
+        const factors = [
+          { name: "Water Level", val: top.water_level_m || 0, max: 15, unit: "m" },
+          { name: "Rainfall (24h)", val: top.rainfall_24h_mm || 0, max: 200, unit: "mm" },
+          { name: "Soil Moisture", val: top.soil_moisture_pct || 0, max: 100, unit: "%" },
+          { name: "Humidity", val: top.humidity_pct || 0, max: 100, unit: "%" },
+          // Pressure FALL is the risk driver, so plot the drop magnitude:
+          // a rising barometer contributes zero risk, not negative width.
+          { name: "Pressure fall", val: Math.max(0, -(top.pressure_trend_hpa_per_hr || 0)),
+            max: 5, unit: " hPa/hr" }
+        ];
+        factorsEl.innerHTML = factors.map(f => {
+          const pct = Math.min(100, Math.round((f.val / f.max) * 100));
+          const color = pct >= 70 ? 'var(--status-alert)' : pct >= 40 ? 'var(--status-watch-text)' : 'var(--status-normal)';
+          return `
+            <div class="factor-item">
+              <div class="factor-meta">
+                <span>${f.name}</span>
+                <span>${f.val.toFixed(1)}${f.unit}</span>
+              </div>
+              <div class="factor-track">
+                <div class="factor-fill" style="width:${pct}%; background:${color};"></div>
+              </div>
+            </div>`;
+        }).join('');
+      } else {
+        factorsEl.innerHTML = '<div style="font-size:12px; color:var(--text-muted);">Awaiting active telemetry data.</div>';
+      }
+
+      // Update Risk Trend Line Chart
+      updateRiskTrendChart(risk.score);
+    }
+
+    // ── CHARTS ──
+    function initCharts() {
+      // Historical Analytics Chart
+      const ctxHist = document.getElementById('historyChartWL').getContext('2d');
+      mainChart = new Chart(ctxHist, {
+        type: 'line',
+        data: { labels: [], datasets: [] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: {
+            y: { title: { display: true, text: 'water level (m)', color: '#000000' },
+                 grid: { color: '#808080' }, ticks: { color: '#000000', font: { family: 'Courier New' } } },
+            // Second axis so hPa (~950-1040) does not flatten metres (0-4).
+            yPressure: { position: 'right', title: { display: true, text: 'pressure (hPa)', color: '#008080' },
+                 grid: { display: false }, ticks: { color: '#008080', font: { family: 'Courier New' } } },
+            x: { grid: { color: '#808080' }, ticks: { color: '#000000', font: { family: 'Courier New' } } }
+          },
+          plugins: { legend: { labels: { color: '#000000', font: { family: 'Courier New' } } } }
+        }
+      });
+
+      // Composite Risk Trend Chart
+      const ctxRisk = document.getElementById('riskTrendChart').getContext('2d');
+      riskChart = new Chart(ctxRisk, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            label: 'Composite Risk Score (0-100)',
+            data: [],
+            borderColor: '#0000FF',
+            backgroundColor: 'rgba(0, 0, 255, 0.08)',
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: {
+            y: { min: 0, max: 100, grid: { color: '#808080' }, ticks: { color: '#000000', font: { family: 'Courier New' } } },
+            x: { grid: { color: '#808080' }, ticks: { color: '#000000', font: { family: 'Courier New' } } }
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
+
+    function updateRiskTrendChart(score) {
+      if (!riskChart) return;
+      const time = new Date().toLocaleTimeString("en-GB");
+      riskChart.data.labels.push(time);
+      riskChart.data.datasets[0].data.push(score);
+      if (riskChart.data.labels.length > 20) {
+        riskChart.data.labels.shift();
+        riskChart.data.datasets[0].data.shift();
+      }
+      riskChart.update('none');
+    }
+
+    function updateChart(nodeId, data) {
+      if (!mainChart) return;
+      const time = data.timestamp || new Date().toLocaleTimeString("en-GB");
+      let dataset = mainChart.data.datasets.find(d => d.label === nodeId);
+      if (!dataset) {
+        const hue = (Object.keys(nodeData).length * 47) % 360;
+        dataset = { label: nodeId, data: [], borderColor: `hsl(${hue},70%,55%)`, backgroundColor: `hsla(${hue},70%,55%,0.1)`, borderWidth: 2, tension: 0.3, fill: true };
+        mainChart.data.datasets.push(dataset);
+      }
+      if (!mainChart.data.labels.includes(time)) {
+        mainChart.data.labels.push(time);
+        if (mainChart.data.labels.length > 20) mainChart.data.labels.shift();
+      }
+      dataset.data.push(data.water_level_m || 0);
+      if (dataset.data.length > 20) dataset.data.shift();
+      mainChart.update('none');
+    }
+
+    async function loadNodeHistory() {
+      const nodes = Object.keys(nodeData);
+      if (!nodes.length || !mainChart) return;
+      const sel = document.getElementById('analyticsNodeSelect');
+      const nodeId = (sel && sel.value) || nodes[0];
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/history/${nodeId}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        const hist = json.history || [];
+        if (!hist.length) return;
+
+        const labels = hist.map(h => (h.ts || '').slice(11, 19));
+
+        let ds = mainChart.data.datasets.find(d => d.label === nodeId);
+        if (!ds) {
+          ds = { label: nodeId, data: [], borderColor: '#0000FF', backgroundColor: 'rgba(0,0,255,0.08)',
+                borderWidth: 2, tension: 0.1, fill: true, pointRadius: 2 };
+          mainChart.data.datasets.push(ds);
+        }
+        ds.data = hist.map(h => h.water_level_m || 0);
+
+        // Barometric pressure on its own axis: hPa (~950-1040) and metres
+        // (0-4) share no sensible scale, so plotting them together on one
+        // axis would flatten the water level into a straight line.
+        let pds = mainChart.data.datasets.find(d => d.label === 'Pressure (hPa)');
+        if (!pds) {
+          pds = { label: 'Pressure (hPa)', data: [], borderColor: '#008080',
+                  backgroundColor: 'rgba(0,128,128,0.05)', borderWidth: 2,
+                  tension: 0.1, fill: false, pointRadius: 1, yAxisID: 'yPressure' };
+          mainChart.data.datasets.push(pds);
+        }
+        pds.data = hist.map(h => h.pressure_hpa != null ? h.pressure_hpa : null);
+
+        // Layer 2's forecast, mapped onto the SafetyRules water-level bands
+        // (NORMAL 0-2m, WATCH 2-3m, ALERT 3-4m midpoints) purely so it can be
+        // plotted next to the real trend. This is an advisory marker, not a
+        // measured reading — see the note above the chart.
+        let fds = mainChart.data.datasets.find(d => d.label === 'ML Forecast (advisory)');
+        if (!fds) {
+          fds = { label: 'ML Forecast (advisory)', data: [], borderColor: '#806600',
+                  backgroundColor: '#FFFF00', borderWidth: 2, borderDash: [6, 4],
+                  pointStyle: 'triangle', pointRadius: 6, fill: false, spanGaps: false };
+          mainChart.data.datasets.push(fds);
+        }
+
+        const advisory = (backendState[nodeId] || {}).forecast_advisory;
+        const forecastLabels = labels.slice();
+        const forecastData = new Array(labels.length).fill(null);
+
+        if (advisory && advisory.probabilities) {
+          const p = advisory.probabilities;
+          const expected = (p.NORMAL || 0) * 1.0 + (p.WATCH || 0) * 2.5 + (p.ALERT || 0) * 3.5;
+          forecastData[labels.length - 1] = ds.data[ds.data.length - 1]; // join the dashed segment to the last real point
+          forecastLabels.push('+2 (fcst)');
+          forecastData.push(Number(expected.toFixed(2)));
+        }
+
+        mainChart.data.labels = forecastLabels;
+        fds.data = forecastData;
+        mainChart.update();
+      } catch (e) { console.warn('History fetch failed:', e); }
+    }
+
+    // ── MQTT CONNECT ──
+    const mqttClient = mqtt.connect(BROKER_WSS, { clientId: CLIENT_ID, clean: true });
+    mqttClient.on("connect", () => {
+      document.getElementById("mqttStatus").className = "status-badge connected";
+      document.getElementById("mqttLabel").textContent = "HiveMQ WSS";
+      mqttClient.subscribe(TOPIC_IN);
+      logEvent("system", "Connected to HiveMQ WSS broker", "INFO");
+    });
+    mqttClient.on("message", (topic, payload) => {
+      try {
+        const msg = JSON.parse(payload.toString());
+        const nodeId = msg.node_id;
+        nodeData[nodeId] = msg;
+        msgCount++;
+        renderNodeCard(nodeId, msg);
+        updateSummary();
+        updateChart(nodeId, msg);
+        logEvent(nodeId, `Telemetry received. ML=${msg.alert_level}`, msg.alert_level);
+      } catch (e) { console.error("MQTT parse error", e); }
+    });
+
+    // ── MANUAL INJECT ──
+    async function submitManualTelemetry() {
+      const nodeId = document.getElementById("manualNodeId").value;
+      const data = {
+        node_id: nodeId,
+        water_level_m: parseFloat(document.getElementById("manualWL").value),
+        rainfall_24h_mm: parseFloat(document.getElementById("manualRain").value),
+        soil_moisture_pct: parseFloat(document.getElementById("manualSoil").value),
+        humidity_pct: parseFloat(document.getElementById("manualHum").value),
+        pressure_trend_hpa_per_hr: parseFloat(document.getElementById("manualTrend").value),
+        pressure_hpa: parseFloat(document.getElementById("manualPressure").value)
+      };
+      try {
+        logEvent("system", `Injecting manual data for ${nodeId}...`, "INFO");
+        const response = await fetch(`${BACKEND_URL}/api/simulate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+        if (!response.ok) {
+          const err = await response.json();
+          logEvent("system", `Inject error: ${err.error || response.statusText}`, "ALERT");
+          return;
+        }
+        const result = await response.json();
+        logEvent("system", `Manual inject success. ML=${result.alert_level}`, result.alert_level);
+      } catch (e) {
+        logEvent("system", `Inject failed: ${e.message}`, "ALERT");
+      }
+    }
+
+    // ── N-NODE GENERATOR ──
+    // Every sensor is derived from ONE underlying severity scalar per node
+    // (0 = bone dry, 1 = full storm) instead of being rolled independently.
+    // Independent rolls used to let e.g. soil moisture hit 90% on an
+    // otherwise calm, dry node — a physically incoherent reading that also
+    // spuriously corroborated Layer 1's rules (>=2 independent reasons skips
+    // the debounce), which is why demo nodes kept jumping straight to ALERT.
+    // Real storms raise water level, rainfall, soil saturation, flow and
+    // turbidity together; this generator now tells that same single story
+    // through every field, with only a little independent sensor noise.
+    const STATION_NAMES = [
+      'Riverbend','Lowlands','Eastbank','Deltapeak','Moorside','Crestview',
+      'Valleyrun','Marshgate','Cliffside','Watershed','Floodplain','Highwater'
+    ];
+    function randBetween(a, b) { return a + Math.random() * (b - a); }
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+    function lerp(a, b, t) { return a + (b - a) * t; }
+
+    // Skewed toward calm: median severity ≈0.2, only ~8% of nodes land in the
+    // ALERT band (severity > ~0.78, where the 0-4m water-level lerp crosses
+    // SafetyRules.WL_ALERT_M = 3.0) — a realistic mix of mostly-normal
+    // stations with the occasional watch and a rare genuine alert.
+    function rollSeverity() { return Math.pow(Math.random(), 3); }
+
+    function sensorsFromSeverity(sev) {
+      return {
+        water_level_m:     clamp(lerp(0.15, 3.85, sev) + randBetween(-0.12, 0.12), 0, 4),
+        rainfall_24h_mm:   clamp(lerp(2,    190,  sev) + randBetween(-8, 8),       0, 200),
+        soil_moisture_pct: clamp(lerp(24,   93,   sev) + randBetween(-5, 5),       0, 100),
+        humidity_pct:      clamp(lerp(45,   96,   sev) + randBetween(-4, 4),       0, 100),
+        // A storm rides in on a falling barometer, so the trend goes more
+        // negative as severity climbs. Rising pressure = fine weather.
+        pressure_trend_hpa_per_hr: clamp(lerp(0.4, -3.2, sev) + randBetween(-0.3, 0.3), -6, 3),
+        // Inverse relationship: a real storm rides in on a low-pressure
+        // system. Auto-sim drifts severity slowly tick to tick, so the
+        // backend sees a genuine multi-minute falling trend, the same way
+        // SafetyRules.PRESSURE_DROP_* expects a real BMP180 to behave.
+        pressure_hpa:      clamp(lerp(1020, 978, sev) + randBetween(-1.5, 1.5), 950, 1040),
+      };
+    }
+
+    function generateRandomNodes() {
+      const n = Math.max(1, Math.min(20, parseInt(document.getElementById('nodeCount').value) || 6));
+      generatedNodes = [];
+      const usedNames = new Set();
+
+      for (let i = 0; i < n; i++) {
+        let name;
+        do { name = STATION_NAMES[Math.floor(Math.random() * STATION_NAMES.length)]; } while (usedNames.has(name));
+        usedNames.add(name);
+        const num = i + 1;
+        const severity = rollSeverity();
+
+        generatedNodes.push({
+          id: `node-${name.toLowerCase()}-${num}`,
+          label: `${name} Station ${num}`,
+          severity,
+          ...sensorsFromSeverity(severity),
+        });
+      }
+
+      document.getElementById('simStatus').textContent = `Generated ${n} random nodes. Click "Start Auto-Simulation" to stream data.`;
+      logEvent('system', `Generated ${n} random nodes`, 'INFO');
+
+      generatedNodes.forEach((node, idx) => {
+        setTimeout(() => postNodePayload(node), idx * 150);
+      });
+    }
+
+    function postNodePayload(node) {
+      const payload = {
+        node_id: node.id,
+        node_label: node.label,
+        water_level_m: node.water_level_m,
+        rainfall_24h_mm: node.rainfall_24h_mm,
+        soil_moisture_pct: node.soil_moisture_pct,
+        humidity_pct: node.humidity_pct,
+        pressure_trend_hpa_per_hr: node.pressure_trend_hpa_per_hr,
+        pressure_hpa: node.pressure_hpa,
+      };
+      fetch(`${BACKEND_URL}/api/simulate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(err => console.error('Sim post error:', err));
+    }
+
+    document.getElementById("autoSimBtn").addEventListener("click", (e) => {
+      const btn = e.currentTarget;
+      if (simInterval) {
+        clearInterval(simInterval);
+        simInterval = null;
+        btn.classList.remove("active");
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Auto-Simulation`;
+        document.getElementById('simStatus').textContent = 'Auto-simulation paused.';
+        return;
+      }
+      if (generatedNodes.length === 0) {
+        showToast('Click "Generate Random Nodes" first.', 'warn');
+        return;
+      }
+      btn.classList.add("active");
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop Simulation`;
+      document.getElementById('simStatus').textContent = `Streaming telemetry for ${generatedNodes.length} nodes every 4s…`;
+
+      // Drift the underlying severity slowly (a real storm builds/recedes
+      // over many packets, not instantly) and re-derive every sensor from
+      // it each tick, so the fields stay physically correlated over time
+      // instead of oscillating on independent sine waves like before.
+      simInterval = setInterval(() => {
+        generatedNodes.forEach((node, idx) => {
+          node.severity = clamp(node.severity + randBetween(-0.04, 0.04), 0, 1);
+          const drift = { ...node, ...sensorsFromSeverity(node.severity) };
+          Object.assign(node, drift);
+          setTimeout(() => postNodePayload(drift), idx * 150);
+        });
+      }, 4000);
+    });
+
+    // ── ALERT DELIVERY ──
+    (() => {
+      const saved = localStorage.getItem('tf_alert_phone');
+      if (saved) document.getElementById('alertPhone').value = saved;
+    })();
+
+    async function sendAlertNow() {
+      const phone = document.getElementById('alertPhone').value.trim();
+      const nodeId = document.getElementById('alertNodeSelect').value;
+      if (!phone) { showToast('Enter a WhatsApp number first.', 'warn'); return; }
+      if (!nodeId) { showToast('Select a target node first.', 'warn'); return; }
+
+      logEvent('system', `Sending alert for ${nodeId} → ${phone}…`, 'INFO');
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/alert/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json',
+                     'X-Dashboard-Key': getDashboardKey() },
+          body: JSON.stringify({ node_id: nodeId, to: phone })
+        });
+        const json = await res.json();
+
+        if (res.status === 401) {
+          localStorage.removeItem("tf_dashboard_key");
+          showToast('Unauthorized — wrong or missing dashboard key.', 'err');
+          logEvent(nodeId, 'Alert rejected: bad dashboard key.', 'ALERT');
+        } else if (res.status === 403) {
+          showToast('This number is not on the server allowlist (ALERT_RECIPIENTS).', 'err');
+          logEvent(nodeId, 'Alert rejected: recipient not allowlisted.', 'ALERT');
+        } else if (res.ok && json.sent) {
+          showToast(`✅ Alert sent! SID: ${json.sid}`, 'ok');
+          logEvent(nodeId, `WhatsApp alert sent → ${phone}`, 'INFO');
+        } else if (res.status === 429) {
+          showToast(json.error === 'global_budget'
+            ? '⏱ Hourly alert budget reached for the whole deployment.'
+            : '⏱ Alert already sent in last 5 min. Cooldown active.', 'warn');
+          logEvent(nodeId, 'Alert blocked by 300s cooldown.', 'WATCH');
+        } else if (json.twilio_code === 63016 || json.twilio_code === '63016') {
+          showToast("📵 Phone hasn't joined Twilio sandbox yet. Send 'join <code' to +1 415 523 8886 first.", 'err');
+          logEvent(nodeId, 'Twilio 63016: Sandbox join required.', 'ALERT');
+        } else {
+          showToast(`❌ Failed: ${json.error || json.twilio_msg || 'Error'}`, 'err');
+          logEvent(nodeId, `Alert failed: ${json.error || 'Error'}`, 'ALERT');
+        }
+      } catch (e) {
+        showToast(`❌ Network error: ${e.message}`, 'err');
+        logEvent('system', `Alert error: ${e.message}`, 'ALERT');
+      }
+    }
+
+    // ── WOKWI NODE TABS ──
+    function renderWokwiPanel(n) {
+      const key = `tf_wokwi_node_${n}`;
+      const saved = localStorage.getItem(key) || DEFAULT_WOKWI_URLS[n-1] || '';
+      const panel = document.getElementById(`wokwi-n${n}`);
+      panel.innerHTML = `
+        <div>
+          <label class="retro-label">Wokwi Project Share URL (Node ${n})</label>
+          <input class="retro-field" type="url" placeholder="https://wokwi.com/projects/..." value="${saved}"
+            oninput="onWokwiUrlChange(${n}, this.value)" id="wokwi-url-${n}">
+        </div>
+        <div style="flex:1;">
+          ${saved
+            ? `<iframe src="${saved}?embed=1" width="100%" height="100%" frameborder="0" style="min-height:380px; border:2px solid; border-color:#808080 #FFFFFF #FFFFFF #808080;"></iframe>`
+            : `<div class="wokwi-placeholder">No project URL linked.<br><br>Paste a Wokwi share link above to embed Node ${n}.</div>`
+          }
+        </div>`;
+    }
+    function onWokwiUrlChange(n, url) {
+      localStorage.setItem(`tf_wokwi_node_${n}`, url);
+      renderWokwiPanel(n);
+    }
+    function switchWokwiTab(n, btn) {
+      document.querySelectorAll('.wokwi-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.wokwi-node-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(`wokwi-n${n}`).classList.add('active');
+    }
+    [1,2,3,4].forEach(n => renderWokwiPanel(n));
+
+    // ── BACKEND POLL ──
+    // MQTT carries the raw telemetry; the backend carries the parts that only
+    // it knows: staleness, Layer 1 reasons, the Layer 2 advisory, the OOD
+    // check, and the cross-node regional note. Poll for those.
+    async function pollBackend() {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/nodes`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+
+        (json.nodes || []).forEach(n => {
+          backendState[n.node_id] = n;
+          nodeData[n.node_id] = { ...(nodeData[n.node_id] || {}), ...n };
+          renderNodeCard(n.node_id, nodeData[n.node_id]);
+        });
+
+        const banner = document.getElementById("regionalBanner");
+        if (json.regional_note) {
+          banner.textContent = json.regional_note;
+          banner.style.display = "block";
+        } else {
+          banner.style.display = "none";
+        }
+
+        updateSummary();
+      } catch (e) {
+        console.warn("backend poll failed", e.message);
+      }
+    }
+
+    // ── WHY DID THIS FIRE? — outbound alert attempt log ──
+    async function loadAlertLog() {
+      const el = document.getElementById("alertLogBody");
+      if (!el) return;
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/alerts/log`);
+        const json = await res.json();
+        const rows = (json.attempts || []).slice().reverse();
+        el.innerHTML = rows.length ? rows.map(a => `
+          <div class="log-row">
+            <span class="log-time">${(a.ts || "").replace("T", " ").slice(0, 19)}</span>
+            <span class="log-node">${a.node_id}</span>
+            <span class="log-msg">${a.alert} via ${a.channel || "?"} &rarr; ${a.success ? "sent" : "FAILED"}${a.error ? " (" + a.error + ")" : ""}${a.twilio_code ? " [twilio " + a.twilio_code + "]" : ""}</span>
+          </div>`).join("") : '<div class="log-row"><span class="log-msg">No alert attempts yet.</span></div>';
+      } catch (e) {
+        el.innerHTML = `<div class="log-row"><span class="log-msg">Log unavailable: ${e.message}</span></div>`;
+      }
+    }
+
+    function toggleAlertLog() {
+      const box = document.getElementById("alertLogBox");
+      if (!box) return;
+      const open = box.style.display === "block";
+      box.style.display = open ? "none" : "block";
+      if (!open) loadAlertLog();
+    }
+
+    // ── DASHBOARD KEY (X-Dashboard-Key for /api/alert/send) ──
+    function getDashboardKey() {
+      let key = localStorage.getItem("tf_dashboard_key") || "";
+      if (!key) {
+        key = (prompt("Dashboard key (DASHBOARD_KEY on the server):") || "").trim();
+        if (key) localStorage.setItem("tf_dashboard_key", key);
+      }
+      return key;
+    }
+
+    pollBackend();
+    setInterval(pollBackend, 5000);
+
+    // Initialize Charts
+    initCharts();
+  </script>
+</body>
+</html>

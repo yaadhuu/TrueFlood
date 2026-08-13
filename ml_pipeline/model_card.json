@@ -1,0 +1,104 @@
+{
+  "name": "floodsense-demo",
+  "track": "demo (synthetic, Wokwi-scale)",
+  "generated_utc": "2026-08-13T12:29:14.955436+00:00",
+  "data_file": "flood_dataset_wokwi_scale.csv",
+  "rows": 1820,
+  "forecast_horizon_steps": 2,
+  "cadence": "daily (one row per day)",
+  "features": [
+    "water_level_m",
+    "rainfall_24h_mm",
+    "soil_moisture_pct",
+    "rainfall_72h_mm",
+    "water_level_change",
+    "soil_saturated",
+    "water_level_lag1",
+    "rainfall_lag1"
+  ],
+  "label_names": [
+    "NORMAL",
+    "WATCH",
+    "ALERT"
+  ],
+  "class_counts": {
+    "NORMAL": 866,
+    "WATCH": 588,
+    "ALERT": 366
+  },
+  "cv": {
+    "scheme": "blocked TimeSeriesSplit",
+    "n_splits": 5
+  },
+  "metrics": {
+    "model": {
+      "macro_f1_mean": 0.45425113836714737,
+      "macro_f1_std": 0.16552314297967657,
+      "mean_cost": 0.9947194719471947
+    },
+    "persistence": {
+      "macro_f1_mean": 0.7068250816039344,
+      "macro_f1_std": 0.1436399876563234,
+      "mean_cost": 0.5333333333333333
+    },
+    "threshold": {
+      "macro_f1_mean": 0.7245776869173641,
+      "macro_f1_std": 0.1396651772071552,
+      "mean_cost": 0.533993399339934
+    }
+  },
+  "best_baseline": "threshold",
+  "margin_vs_best_baseline": -0.27032654855021676,
+  "gate_passed": false,
+  "gate_enforced": false,
+  "cost_matrix": [
+    [
+      0.0,
+      1.0,
+      2.0
+    ],
+    [
+      4.0,
+      0.0,
+      1.0
+    ],
+    [
+      20.0,
+      8.0,
+      0.0
+    ]
+  ],
+  "decision_rule": "expected-cost minimisation over COST_MATRIX",
+  "feature_ranges": {
+    "water_level_m": {
+      "min": 0.0,
+      "max": 4.0,
+      "p01": 0.00203735104228108,
+      "p99": 3.9980129753308886,
+      "mean": 0.765520546271366,
+      "std": 1.3488093568900712
+    },
+    "rainfall_24h_mm": {
+      "min": 0.0,
+      "max": 200.0,
+      "p01": 0.0,
+      "p99": 158.22856196744388,
+      "mean": 24.659524872039963,
+      "std": 24.13961393891146
+    },
+    "soil_moisture_pct": {
+      "min": 18.0,
+      "max": 99.0,
+      "p01": 26.6,
+      "p99": 97.96199999999999,
+      "mean": 62.68104395604396,
+      "std": 17.378890533713125
+    }
+  },
+  "sklearn_version": "1.9.0",
+  "limitations": [
+    "The label is a deterministic threshold rule over the same features the model sees, not an observed flood event. High in-sample scores measure rule recovery, not forecasting skill.",
+    "The dataset is synthetic and rescaled to the Wokwi sensor ranges for demo consistency. It is not hydrology.",
+    "This model is ADVISORY ONLY. Alarms are driven by the deterministic Layer-1 SafetyRules in backend/predict.py."
+  ]
+}

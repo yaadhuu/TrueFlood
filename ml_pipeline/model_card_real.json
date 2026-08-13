@@ -1,0 +1,125 @@
+{
+  "name": "floodsense-real",
+  "track": "real data (USGS + Open-Meteo, externally published label)",
+  "generated_utc": "2026-08-12T06:41:34.235239+00:00",
+  "data_source": {
+    "usgs_site": "05389500",
+    "station_name": "Mississippi River at McGregor, IA",
+    "latitude": 43.02701224,
+    "longitude": -91.1726298,
+    "date_range": [
+      "2006-01-01",
+      "2024-12-31"
+    ],
+    "usgs_parameters": {
+      "00060": "discharge cfs (daily mean)",
+      "00065": "gage height ft (daily mean)"
+    },
+    "weather": "Open-Meteo archive: precipitation_sum, temperature_2m_mean",
+    "nws_gauge_lid": "MCGI4",
+    "nws_minor_flood_stage_ft": 16.0,
+    "nws_action_stage_ft": 13.0,
+    "flood_stage_source": "https://water.noaa.gov/gauges/MCGI4"
+  },
+  "rows": 4714,
+  "forecast_horizon_days": 2,
+  "label": "gage_height_ft >= 16.0 ft, 2 days ahead",
+  "class_balance": {
+    "flood": 234,
+    "no_flood": 4480,
+    "flood_rate": 0.04963937208315655
+  },
+  "features": [
+    "gage_height_ft",
+    "precip_mm",
+    "temp_mean_c",
+    "gage_height_lag1",
+    "precip_lag1",
+    "gage_delta_1d",
+    "gage_delta_3d",
+    "precip_3d_mm",
+    "precip_7d_mm",
+    "precip_14d_mm",
+    "stage_margin_ft"
+  ],
+  "cv": {
+    "scheme": "blocked TimeSeriesSplit",
+    "n_splits": 5,
+    "folds_scored": 3,
+    "folds_skipped_single_class": [
+      1,
+      4
+    ]
+  },
+  "decision_threshold": 0.5,
+  "metrics": {
+    "model": {
+      "flood_recall": 0.9911504424778762,
+      "flood_precision": 0.8331934731934733,
+      "pr_auc": 0.9517553717079609,
+      "accuracy": 0.9855626326963907,
+      "flood_f1": 0.9016052390081247
+    },
+    "persistence": {
+      "flood_precision": 0.8590736004546745,
+      "accuracy": 0.9813163481953291,
+      "flood_recall": 0.845592251977815,
+      "flood_f1": 0.8519488767166785
+    }
+  },
+  "margin_vs_persistence_f1": 0.04965636229144621,
+  "beats_persistence": true,
+  "feature_importances": [
+    {
+      "feature": "stage_margin_ft",
+      "importance": 0.34972588581665365
+    },
+    {
+      "feature": "gage_height_ft",
+      "importance": 0.30081461244431135
+    },
+    {
+      "feature": "gage_height_lag1",
+      "importance": 0.23574165788413404
+    },
+    {
+      "feature": "gage_delta_3d",
+      "importance": 0.03516768071335336
+    },
+    {
+      "feature": "precip_14d_mm",
+      "importance": 0.03300452502615495
+    },
+    {
+      "feature": "gage_delta_1d",
+      "importance": 0.02385032206918055
+    },
+    {
+      "feature": "temp_mean_c",
+      "importance": 0.012671422752220675
+    },
+    {
+      "feature": "precip_7d_mm",
+      "importance": 0.006141653028690239
+    },
+    {
+      "feature": "precip_3d_mm",
+      "importance": 0.0013244325060791065
+    },
+    {
+      "feature": "precip_lag1",
+      "importance": 0.0009368038826361178
+    },
+    {
+      "feature": "precip_mm",
+      "importance": 0.0006210038765861673
+    }
+  ],
+  "sklearn_version": "1.9.0",
+  "caveats": [
+    "The Mississippi at McGregor is a large, slow river: stage moves over days, so today's stage is already a strong 2-day predictor. That is why persistence scores as high as it does, and why the model's margin over it is modest rather than dramatic.",
+    "`stage_margin_ft` is a deterministic function of `gage_height_ft`; it adds no information, only a convenient framing. No feature uses data from after the prediction time.",
+    "Folds containing only one class are skipped, not scored - floods are clustered in time and an early fold can contain none. Skipped folds are listed in `cv.folds_skipped_single_class`.",
+    "This site publishes daily stage but almost no daily discharge (0.6% overlap), so discharge features were dropped at runtime."
+  ]
+}

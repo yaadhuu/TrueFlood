@@ -1,0 +1,70 @@
+# ── Secrets (NEVER commit real credentials) ────────────────────
+.env
+backend/.env
+*.env
+!.env.example
+keys.txt
+*.key
+*.pem
+secrets.txt
+credentials.txt
+
+# ── Python ─────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-wheel-metadata/
+*.egg
+
+# ── Virtual environments ────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+.virtualenv/
+
+# ── IDE / editor ────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── OS ──────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+ehthumbs.db
+Desktop.ini
+
+# ── Logs ────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Test / coverage ─────────────────────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+.vercel
+
+# ── Databases (runtime state, never source) ─────────────────────
+# Two copies of flood_data.db were previously committed because DB_PATH was a
+# relative path. DB_PATH is absolute and configurable now; keep the artefacts out.
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+
+# NOTE: ml_pipeline/raw/ is deliberately NOT ignored. The cached USGS and
+# Open-Meteo fetches are small (~300 KB) and committing them makes the
+# real-data track reproducible in CI without hitting either API.

@@ -1,0 +1,44 @@
+# Optional local stack. Not the deploy path — see Procfile / render.yaml.
+#   docker compose -f docker/docker-compose.yml up --build
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      # Point at a private broker in anything but a throwaway demo.
+      MQTT_BROKER: ${MQTT_BROKER:-broker.hivemq.com}
+      MQTT_PORT: ${MQTT_PORT:-8883}
+      MQTT_USER: ${MQTT_USER:-}
+      MQTT_PASS: ${MQTT_PASS:-}
+      DB_PATH: /data/flood_data.db
+      DEMO_MODE: "true"
+      NODE_STALE_SEC: "60"
+      WEB_CONCURRENCY: "1"
+      DASHBOARD_KEY: ${DASHBOARD_KEY:-}
+      ALERT_RECIPIENTS: ${ALERT_RECIPIENTS:-}
+      NODE_COORDS: ${NODE_COORDS:-}
+    volumes:
+      - flood-data:/data
+    restart: unless-stopped
+
+  # Runs the drift check hourly against the same database.
+  drift:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    environment:
+      DB_PATH: /data/flood_data.db
+    volumes:
+      - flood-data:/data
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "while true; do python monitoring/drift.py --db $$DB_PATH --hours 24 || echo 'DRIFT ALARM'; sleep 3600; done"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  flood-data:

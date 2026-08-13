@@ -1,0 +1,466 @@
+{
+  "version": 1,
+  "author": "FloodSense",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-esp32-devkit-v1",
+      "id": "esp",
+      "top": 200,
+      "left": 240,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-text",
+      "id": "txt_group_level",
+      "top": -60,
+      "left": -280,
+      "attrs": {
+        "text": "WATER LEVEL"
+      }
+    },
+    {
+      "type": "wokwi-hc-sr04",
+      "id": "hcsr04_water_level",
+      "top": -10,
+      "left": -280,
+      "attrs": {
+        "label": "Water Level - HC-SR04, faces DOWN at the channel"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "txt_level_note",
+      "top": 100,
+      "left": -280,
+      "attrs": {
+        "text": "Mounted above the water, so it measures the AIR GAP:\nshorter distance = higher water. 0 - 4.0 m (TANK_DEPTH_M)."
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "txt_group_weather",
+      "top": 200,
+      "left": -280,
+      "attrs": {
+        "text": "WEATHER FRONT"
+      }
+    },
+    {
+      "type": "wokwi-bmp180",
+      "id": "bmp_pressure",
+      "top": 250,
+      "left": -280,
+      "attrs": {
+        "label": "Barometric Pressure + Temp (BMP180) - storm front"
+      }
+    },
+    {
+      "type": "wokwi-dht22",
+      "id": "dht_humidity",
+      "top": 250,
+      "left": -100,
+      "attrs": {
+        "label": "Humidity + Temp (DHT22)"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "txt_pressure_note",
+      "top": 390,
+      "left": -280,
+      "attrs": {
+        "text": "A FALLING barometer is the storm precursor.\nThe rate (hPa/hr) is the signal, not the reading."
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "txt_group_ground",
+      "top": 480,
+      "left": -280,
+      "attrs": {
+        "text": "RAINFALL & GROUND SATURATION"
+      }
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "pot_rainfall",
+      "top": 520,
+      "left": -280,
+      "attrs": {
+        "label": "Rain Gauge (tipping-bucket sim) 0-200 mm/24h"
+      }
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "pot_soil_moisture",
+      "top": 520,
+      "left": -80,
+      "attrs": {
+        "label": "Soil Moisture (capacitive probe sim) 0-100 %"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "txt_ground_note",
+      "top": 650,
+      "left": -280,
+      "attrs": {
+        "text": "Saturated ground has no absorption capacity left:\nrain on 98% soil runs straight off into the channel."
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "txt_group_out",
+      "top": 20,
+      "left": 470,
+      "attrs": {
+        "text": "LOCAL ALERTING  (backend verdict, or local if offline)"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r1",
+      "top": 90,
+      "left": 480,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r2",
+      "top": 160,
+      "left": 480,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r3",
+      "top": 230,
+      "left": 480,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led_safe",
+      "top": 90,
+      "left": 580,
+      "attrs": {
+        "color": "green",
+        "label": "SAFE"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led_warning",
+      "top": 160,
+      "left": 580,
+      "attrs": {
+        "color": "yellow",
+        "label": "WARNING"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led_critical",
+      "top": 230,
+      "left": 580,
+      "attrs": {
+        "color": "red",
+        "label": "CRITICAL"
+      }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "buzzer_alarm",
+      "top": 300,
+      "left": 480,
+      "attrs": {
+        "volume": "0.1"
+      }
+    },
+    {
+      "type": "wokwi-lcd1602",
+      "id": "lcd_dashboard",
+      "top": 390,
+      "left": 450,
+      "attrs": {
+        "pins": "i2c",
+        "address": "0x27"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "txt_sim_note",
+      "top": 570,
+      "left": 450,
+      "attrs": {
+        "text": "Wokwi simulation: the potentiometers stand in for sensors Wokwi has\nno model for. See firmware/NODES_SETUP.md for the full mapping."
+      }
+    }
+  ],
+  "connections": [
+    [
+      "bmp_pressure:VCC",
+      "esp:3V3",
+      "red",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "bmp_pressure:GND",
+      "esp:GND.1",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "bmp_pressure:SDA",
+      "esp:D21",
+      "blue",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "bmp_pressure:SCL",
+      "esp:D22",
+      "green",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "lcd_dashboard:VCC",
+      "esp:3V3",
+      "red",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "lcd_dashboard:GND",
+      "esp:GND.1",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "lcd_dashboard:SDA",
+      "esp:D21",
+      "blue",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "lcd_dashboard:SCL",
+      "esp:D22",
+      "green",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "dht_humidity:VCC",
+      "esp:3V3",
+      "red",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "dht_humidity:GND",
+      "esp:GND.1",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "dht_humidity:SDA",
+      "esp:D15",
+      "orange",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "hcsr04_water_level:VCC",
+      "esp:3V3",
+      "red",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "hcsr04_water_level:GND",
+      "esp:GND.2",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "hcsr04_water_level:TRIG",
+      "esp:D5",
+      "purple",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "hcsr04_water_level:ECHO",
+      "esp:D18",
+      "orange",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "pot_rainfall:VCC",
+      "esp:3V3",
+      "red",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "pot_rainfall:GND",
+      "esp:GND.2",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "pot_rainfall:SIG",
+      "esp:D34",
+      "green",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "pot_soil_moisture:VCC",
+      "esp:3V3",
+      "red",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "pot_soil_moisture:GND",
+      "esp:GND.2",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "pot_soil_moisture:SIG",
+      "esp:D35",
+      "purple",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:D25",
+      "r1:1",
+      "green",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "r1:2",
+      "led_safe:A",
+      "green",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "led_safe:C",
+      "esp:GND.1",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:D26",
+      "r2:1",
+      "yellow",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "r2:2",
+      "led_warning:A",
+      "yellow",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "led_warning:C",
+      "esp:GND.1",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:D27",
+      "r3:1",
+      "red",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "r3:2",
+      "led_critical:A",
+      "red",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "led_critical:C",
+      "esp:GND.2",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:D14",
+      "buzzer_alarm:1",
+      "purple",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "buzzer_alarm:2",
+      "esp:GND.2",
+      "black",
+      [
+        "v0"
+      ]
+    ]
+  ],
+  "dependencies": {}
+}
