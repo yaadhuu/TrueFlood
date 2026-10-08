@@ -24,6 +24,9 @@ that state must not be wired to a siren. The numbers are below, unrounded.
 
 ---
 
+For a plain-words walkthrough of every part and every design decision, see
+[`ARCHITECTURE.md`](ARCHITECTURE.md).
+
 ## The honest headline
 
 **Demo track** (synthetic dataset, rescaled to the Wokwi sensor ranges),
@@ -78,7 +81,7 @@ ESP32 nodes (Wokwi, sensors labelled on-canvas)
    │ MQTT  flood/sensor/<node_id>        │ MQTT  flood/status/<node_id>  (retained LWT)
    ▼                                     ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│ Flask + paho bridge  (backend/mqtt_bridge.py)                    │
+│ Flask + paho bridge  (backend/app.py + mqtt_client.py)           │
 │                                                                  │
 │  Layer 1  SAFETY RULES  ── thresholds + hysteresis               │  ──► alarms
 │           (backend/predict.py)   + corroboration bypass          │      + reasons
@@ -159,7 +162,11 @@ Full mapping, wiring and per-state reproduction recipes:
 
 ```text
 ├── backend/
-│   ├── mqtt_bridge.py       # MQTT ingest, REST API, alerting, metrics
+│   ├── app.py               # entry point + REST API, health, Prometheus metrics
+│   ├── config.py            # every environment setting in one place
+│   ├── mqtt_client.py       # MQTT ingest: subscribe, process, publish, alert
+│   ├── nodes.py             # reading pipeline, validation, node liveness
+│   ├── alerts.py            # Twilio WhatsApp -> SMS, cooldown, hourly budget
 │   ├── predict.py           # Layer 1 SafetyRules + Layer 2 FloodPredictor
 │   ├── weather.py           # Layer 3 Open-Meteo forecast fusion
 │   └── db.py                # SQLite: absolute path, WAL, indexed
@@ -175,7 +182,8 @@ Full mapping, wiring and per-state reproduction recipes:
 │   └── seed_test_db.py      # seeds a throwaway DB to exercise the monitor
 ├── firmware/
 │   ├── sketch.ino           # ESP32: one water-level scale, LWT, non-blocking LCD
-│   ├── make_diagrams.py     # generates all 4 diagrams so they cannot drift
+│   ├── make_diagrams.py     # generates diagram.json (Wokwi wiring)
+│   ├── diagram.json         # Wokwi wiring, shared by every node
 │   └── NODES_SETUP.md       # sensor mapping table + ALERT reproduction recipe
 ├── frontend/index.html      # dashboard: reasons, staleness, advisory, regional note
 ├── tests/                   # safety-rule and API tests
@@ -193,7 +201,7 @@ cp .env.example backend/.env          # fill in DASHBOARD_KEY, ALERT_RECIPIENTS,
 
 python ml_pipeline/rescale_dataset.py # data -> Wokwi ranges (prints before/after)
 python ml_pipeline/train.py --no-gate # trains; prints the baseline comparison
-python backend/mqtt_bridge.py         # http://localhost:8080
+python backend/app.py                 # http://localhost:8080
 python -m http.server 3000 --directory frontend
 ```
 
@@ -253,7 +261,7 @@ sensor noise produces an enormous and meaningless score.
 
 **Deployment.** Plain Python on Render/Railway — no Docker required.
 `--workers 1` is load-bearing (the MQTT client and the predictor's hysteresis
-state are process-local) and `mqtt_bridge.py` refuses to boot if
+state are process-local) and `app.py` refuses to boot if
 `WEB_CONCURRENCY != 1`. `render.yaml` carries every environment variable,
 including a commented persistent-disk block, since the free tier's filesystem
 is ephemeral; Postgres is the production-scale alternative and `db.py`'s
@@ -277,7 +285,7 @@ bridge falls back to SMS via `SMS_FALLBACK_FROM`.
 pytest tests/ -v
 ```
 
-25 tests: the Layer 1 rule engine (calm, storm, rapid rise, compound
+46 tests: the Layer 1 rule engine (calm, storm, rapid rise, compound
 saturation, debounce, corroboration bypass, missing-model degradation, slow
 de-escalation, Layer 3 fusion, and the invariant that Layer 2 never overrides
 Layer 1) plus the API surface (auth gates, allowlist, global budget, the 503
