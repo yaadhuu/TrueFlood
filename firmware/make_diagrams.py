@@ -1,9 +1,10 @@
 """
-Generate firmware/diagram_node<N>.json for all four Wokwi nodes.
+Generate firmware/diagram.json, the Wokwi wiring for every sensor node.
 
-Why a generator instead of four hand-edited files: the four diagrams must stay
-byte-identical (nodes are differentiated by the NODE_ID #define in sketch.ino,
-not by their wiring), and hand-editing four copies is how they drift apart.
+All nodes share this wiring; each node is told apart only by the NODE_ID
+#define in sketch.ino. Generating the file (instead of hand-editing it) keeps
+the pin numbers here and in sketch.ino in sync - tests/test_firmware_sync.py
+checks that.
 
 Sensor roster (hardware refresh)
 --------------------------------
@@ -17,7 +18,7 @@ Sensor roster (hardware refresh)
 
 Flow-velocity and turbidity sensors were REMOVED in this refresh. They were
 two of the five features the trained model consumed, so removing them is not
-a firmware-only change -- see §4 of the plan and MODEL_CARD.md. The model was
+a firmware-only change -- see MODEL_CARD.md. The model was
 retrained without them rather than being fed silent 0.0 defaults.
 
 Board / pin naming
@@ -52,7 +53,6 @@ import json
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-NODES = 4
 
 BOARD_TYPE = "wokwi-esp32-devkit-v1"
 
@@ -248,16 +248,11 @@ def main() -> int:
         "dependencies": {},
     }
     blob = json.dumps(diagram, indent=2) + "\n"
-    for n in range(1, NODES + 1):
-        path = os.path.join(HERE, f"diagram_node{n}.json")
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(blob)
-        print(f"wrote {path}")
-    # NOTE: this generator does NOT write firmware/diagram.json. That path is
-    # the hand-authored diagram paired with firmware/main.py (a standalone
-    # MicroPython build with float switches, TX0/RX0 to $serialMonitor, and a
-    # different pin layout than the C++ sketch.ino below). Overwriting it here
-    # would silently break that pairing.
+    # Every node uses the same wiring; nodes differ only by NODE_ID in sketch.ino.
+    path = os.path.join(HERE, "diagram.json")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(blob)
+    print(f"wrote {path}")
     print(f"{len(PARTS)} parts, {len(CONNECTIONS)} connections, "
           f"board={BOARD_TYPE}")
     return 0
