@@ -32,7 +32,7 @@ accuracy:
     1.50 < water_level_m <= 25.35                -> 1   (2 if turbidity > 665.5)
     water_level_m > 25.35                        -> 2
 
-Rather than leave the old 0/1/2 column sitting on top of rescaled features
+Rather than keep the original 0/1/2 labels on top of rescaled features
 (which would be a new and subtler mismatch), the same rule is re-applied
 using breakpoints pushed through the same affine map.  The label distribution
 is therefore preserved, and the label stays consistent with the features.
@@ -210,7 +210,7 @@ def main() -> int:
     print("  rescaled:", dict(new_dist))
     print(f"  agreement with original labels: {agree:.3%}")
 
-    # Sanity check consumed by Phase 1 acceptance and by backend/predict.py's
+    # Sanity check referenced by backend/predict.py's
     # SafetyRules docstring: the Layer-1 alarm threshold must land inside the
     # rescaled ALERT band, otherwise the two layers disagree about what
     # "flood" means on the same physical scale.

@@ -88,10 +88,10 @@ class SafetyRules:
     """
     Layer 1: deterministic threshold engine with hysteresis.
 
-    Scale note (Phase 1): these constants were calibrated against the 0-4 m
-    Wokwi water-level range (`TANK_DEPTH_M = 4.0f` in firmware/sketch.ino),
+    Scale: these constants are calibrated against the 0-4 m Wokwi
+    water-level range (`TANK_DEPTH_M = 4.0f` in firmware/sketch.ino),
     independently of the training dataset.  `ml_pipeline/rescale_dataset.py`
-    now maps the training data onto that same 0-4 m range and re-derives its
+    maps the training data onto that same 0-4 m range and re-derives its
     labels, and it prints a check confirming that `WL_ALERT_M = 3.0` sits
     inside the rescaled ALERT band (breakpoint 1.668 m).  The two layers
     therefore agree on what a metre means.  They still disagree on where to
@@ -119,8 +119,8 @@ class SafetyRules:
     SOIL_SATURATED_PCT = 98.0
 
     # Rate of rise (m per minute) - the single most predictive flash-flood
-    # signal. Retained through the hardware refresh: it is derived from the
-    # water-level sensor, not from either of the sensors that were removed.
+    # signal. It is derived from the water-level sensor alone, so it needs no
+    # extra hardware.
     RISE_WATCH_M_PER_MIN = 0.10
     RISE_ALERT_M_PER_MIN = 0.25
 
@@ -509,7 +509,7 @@ class FloodPredictor:
             "model_available": self.model is not None,
             "model_error": self.model_error,
             "sensor_source": current_data.get("sensor_source"),
-            # Back-compat: older callers and the frontend read `probabilities`.
+            # The dashboard reads the model's class probabilities from here.
             "confidence": 1.0,
             "probabilities": (advisory or {}).get(
                 "probabilities", {n: 0.0 for n in LABEL_NAMES}),
@@ -524,25 +524,6 @@ class FloodPredictor:
                 self._nodes.pop(node_id, None)
 
 
-# Global instance imported by the MQTT bridge.
+# One shared predictor for the whole process (used by backend/nodes.py).
 predictor = FloodPredictor()
 
-
-def predict_flood(
-    water_level_m: float,
-    rainfall_24h_mm: float,
-    soil_moisture_pct: float,
-    node_id: str = "default",
-) -> dict:
-    """Backward-compatible wrapper kept for older callers."""
-    res = predictor.predict(node_id, {
-        "water_level_m": water_level_m,
-        "rainfall_24h_mm": rainfall_24h_mm,
-        "soil_moisture_pct": soil_moisture_pct,
-    })
-    return {
-        "alert_level": res["status"],
-        "class_id": res["level"],
-        "reasons": res["reasons"],
-        "probabilities": res["probabilities"],
-    }

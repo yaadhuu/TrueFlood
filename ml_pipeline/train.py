@@ -54,14 +54,10 @@ LABEL_NAMES = ["NORMAL", "WATCH", "ALERT"]
 FORECAST_HORIZON = 2  # days ahead
 N_SPLITS = 5
 
-# Hardware refresh: the flow-velocity and turbidity sensors were removed from
-# the node, so those columns no longer exist in live telemetry. They are gone
-# from the feature vector rather than being fed silent 0.0 defaults, which
-# would have produced confident garbage that looked like it was working.
-# discharge_m3s / discharge_lag1 went with them (discharge was
-# water_level x flow_velocity, undefined without a velocity reading - and
-# mislabelled anyway: depth x velocity is m2/s, not m3/s), as did
-# turbidity_spike.
+# Only features the sensor nodes actually report are used. The nodes have no
+# flow-velocity or turbidity sensor, so those columns (and the discharge and
+# turbidity_spike features derived from them) are left out, rather than filled
+# with 0.0 defaults at serving time - that would give confident nonsense.
 FEATURE_COLS = [
     "water_level_m", "rainfall_24h_mm", "soil_moisture_pct",
     "rainfall_72h_mm", "water_level_change",
@@ -106,9 +102,7 @@ def threshold_baseline(X: pd.DataFrame) -> np.ndarray:
     """
     Hand-written rule on the current reading. No learning involved.
 
-    Rewritten for the post-hardware-refresh feature set: the old version keyed
-    off turbidity, which is no longer a column, so it raised KeyError rather
-    than quietly scoring wrong. Rainfall stands in as the second signal.
+    Uses water level and rainfall, two signals every node reports.
     """
     wl = X["water_level_m"].values
     rain = X["rainfall_24h_mm"].values
@@ -159,7 +153,7 @@ def main() -> int:
     y_now = df["y_now"].astype(int).values
 
     print(f"rows      : {len(df)}")
-    print(f"labels    : " + ", ".join(
+    print("labels    : " + ", ".join(
         f"{LABEL_NAMES[k]}={int((y == k).sum())}" for k in range(3)))
 
     tscv = TimeSeriesSplit(n_splits=N_SPLITS)

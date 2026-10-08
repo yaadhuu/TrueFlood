@@ -355,8 +355,8 @@ def write_card_md(card: dict) -> None:
         f"- Coordinates: {ds['latitude']}, {ds['longitude']}",
         f"- Range: {ds['date_range'][0]} to {ds['date_range'][1]} "
         f"({card['rows']} usable rows)",
-        f"- USGS parameters: 00060 discharge (cfs), 00065 gage height (ft), "
-        f"daily mean (statCd 00003)",
+        "- USGS parameters: 00060 discharge (cfs), 00065 gage height (ft), "
+        "daily mean (statCd 00003)",
         f"- Weather: {ds['weather']} at the gauge's own coordinates",
         f"- **NWS minor flood stage: {ds['nws_minor_flood_stage_ft']} ft** "
         f"(gauge `{ds['nws_gauge_lid']}`, {ds['flood_stage_source']})",
