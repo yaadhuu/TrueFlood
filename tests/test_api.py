@@ -35,24 +35,25 @@ def bridge(tmp_path, monkeypatch):
                 "TWILIO_TO", "SMS_FALLBACK_FROM", "NODE_COORDS"):
         monkeypatch.delenv(var, raising=False)
 
-    # mqtt_bridge.py calls load_dotenv(..., override=True) at import time, so
-    # a developer's local backend/.env (created by following .env.example)
-    # would silently clobber every env var this fixture just set. Neutralize
-    # it so the test's environment is the only source of truth.
+    # config.py calls load_dotenv(..., override=True) at import time, so a
+    # developer's local backend/.env would overwrite every env var set above.
+    # Disable it so the test's environment is the only source of truth.
     import dotenv  # noqa: PLC0415
     monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: False)
 
-    import db  # noqa: PLC0415
-    importlib.reload(db)
-    import mqtt_bridge  # noqa: PLC0415
-    importlib.reload(mqtt_bridge)
-    mqtt_bridge.app.config["TESTING"] = True
-    return mqtt_bridge
+    # Re-import every backend module in dependency order so each one reads
+    # this test's environment and starts with fresh state.
+    import types  # noqa: PLC0415
+    modules = {}
+    for name in ("config", "db", "alerts", "nodes", "mqtt_client", "app"):
+        modules[name] = importlib.reload(importlib.import_module(name))
+    modules["app"].app.config["TESTING"] = True
+    return types.SimpleNamespace(**modules)
 
 
 @pytest.fixture
 def client(bridge):
-    return bridge.app.test_client()
+    return bridge.app.app.test_client()
 
 
 STORM = {
@@ -99,28 +100,28 @@ def test_test_alert_requires_secret(client):
 
 def test_global_send_budget_caps_outbound(bridge):
     """The global budget must bite even when every per-node cooldown allows."""
-    assert bridge.GLOBAL_MAX_PER_HOUR == 3
-    assert [bridge._global_budget_ok() for _ in range(4)] == [True, True, True, False]
+    assert bridge.config.GLOBAL_MAX_PER_HOUR == 3
+    assert [bridge.alerts.global_budget_ok() for _ in range(4)] == [True, True, True, False]
 
 
 # ── health / metrics ─────────────────────────────────────────────
 
 def test_health_is_503_when_mqtt_disconnected(client, bridge):
-    bridge._mqtt_connected = False
+    bridge.mqtt_client.connected = False
     r = client.get("/api/health")
     assert r.status_code == 503
     assert r.get_json()["status"] == "degraded"
 
 
 def test_health_is_200_when_connected(client, bridge):
-    bridge._mqtt_connected = True
+    bridge.mqtt_client.connected = True
     r = client.get("/api/health")
     assert r.status_code == 200
     assert r.get_json()["mqtt_connected"] is True
 
 
 def test_metrics_is_prometheus_text(client, bridge):
-    bridge._mqtt_connected = True
+    bridge.mqtt_client.connected = True
     client.post("/api/simulate", json={"node_id": "node-1", **CALM})
     r = client.get("/api/metrics")
     assert r.status_code == 200
@@ -151,7 +152,7 @@ def test_nodes_report_staleness(client, bridge):
 
     # An LWT "offline" marks the node dead immediately, without waiting out
     # NODE_STALE_SEC.
-    bridge.node_link_state["node-1"] = "offline"
+    bridge.nodes.node_link_state["node-1"] = "offline"
     body = client.get("/api/nodes").get_json()
     assert body["nodes"][0]["stale"] is True
     assert body["stale_count"] == 1
@@ -168,7 +169,7 @@ def test_regional_note_appears_with_two_elevated_nodes(client):
 def test_stale_nodes_are_excluded_from_regional_consensus(client, bridge):
     client.post("/api/simulate", json={"node_id": "node-1", **STORM})
     client.post("/api/simulate", json={"node_id": "node-2", **STORM})
-    bridge.node_link_state["node-2"] = "offline"
+    bridge.nodes.node_link_state["node-2"] = "offline"
     assert client.get("/api/nodes").get_json()["regional_note"] is None
 
 

@@ -28,6 +28,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=4).status==200 else 1)"
 
-# --workers 1 is load-bearing; see mqtt_bridge.py's WEB_CONCURRENCY assertion.
-CMD ["gunicorn", "--chdir", "backend", "mqtt_bridge:app", \
+# --workers 1 is load-bearing; see app.py's WEB_CONCURRENCY assertion.
+CMD ["gunicorn", "--chdir", "backend", "app:app", \
      "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "120"]

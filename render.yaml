@@ -5,9 +5,9 @@ services:
     buildCommand: pip install -r requirements.txt
     # --workers 1 is load-bearing: the MQTT client and the predictor's
     # hysteresis state are process-local. Two workers = two subscriptions,
-    # two sets of debounce state, duplicate alerts. mqtt_bridge.py asserts
+    # two sets of debounce state, duplicate alerts. app.py asserts
     # WEB_CONCURRENCY == 1 at import and refuses to boot otherwise.
-    startCommand: gunicorn --chdir backend mqtt_bridge:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    startCommand: gunicorn --chdir backend app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
     healthCheckPath: /api/health
     # A persistent disk is required for the SQLite history to survive a
     # restart — Render's free tier filesystem is ephemeral. Uncomment on a
